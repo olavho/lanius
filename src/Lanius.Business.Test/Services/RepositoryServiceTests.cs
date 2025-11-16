@@ -67,7 +67,7 @@ public class RepositoryServiceTests
     }
 
     [TestMethod]
-    public async Task CloneRepositoryAsync_RepositoryAlreadyExists_ThrowsException()
+    public async Task CloneRepositoryAsync_RepositoryAlreadyExists_FetchesAndReturnsInfo()
     {
         // Arrange - Create a local repository instead of cloning from GitHub
         var localRepoPath = CreateLocalTestRepository();
@@ -77,12 +77,21 @@ public class RepositoryServiceTests
         var repoId = GenerateRepositoryId(url);
         var targetPath = Path.Combine(_testBasePath, repoId);
         Directory.Move(localRepoPath, targetPath);
-
-        // Act & Assert
-        var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => _service.CloneRepositoryAsync(url));
         
-        Assert.IsTrue(exception.Message.Contains("already exists"));
+        // Add remote to repository
+        using (var repo = new Repository(targetPath))
+        {
+            repo.Network.Remotes.Add("origin", url);
+        }
+
+        // Act - Should not throw, should return existing repository info
+        var info = await _service.CloneRepositoryAsync(url);
+
+        // Assert
+        Assert.IsNotNull(info);
+        Assert.AreEqual(repoId, info.Id);
+        Assert.AreEqual(url, info.Url);
+        Assert.IsTrue(_service.RepositoryExists(repoId));
     }
 
     [TestMethod]

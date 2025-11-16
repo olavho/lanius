@@ -6,4 +6,5 @@
   <Project Path="src/Lanius.Api/Lanius.Api.csproj" />
   <Project Path="src/Lanius.Business.Test/Lanius.Business.Test.csproj" />
   <Project Path="src/Lanius.Business/Lanius.Business.csproj" />
+  <Project Path="src/Lanius.Web/Lanius.Web.csproj" />
 </Solution>

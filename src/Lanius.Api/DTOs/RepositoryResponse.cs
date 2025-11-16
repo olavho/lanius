@@ -12,4 +12,5 @@ public class RepositoryResponse
     public DateTimeOffset? LastFetchedAt { get; init; }
     public int TotalCommits { get; init; }
     public int TotalBranches { get; init; }
+    public bool AlreadyExisted { get; init; }
 }

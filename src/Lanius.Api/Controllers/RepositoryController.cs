@@ -27,6 +27,7 @@ public class RepositoryController : ControllerBase
     /// <returns>Repository information.</returns>
     [HttpPost("clone")]
     [ProducesResponseType(typeof(RepositoryResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(RepositoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<RepositoryResponse>> CloneRepository(
@@ -36,6 +37,10 @@ public class RepositoryController : ControllerBase
         try
         {
             _logger.LogInformation("Cloning repository from URL: {Url}", request.Url);
+
+            // Check if repository already exists before cloning
+            var repoId = GenerateRepositoryId(request.Url);
+            var alreadyExisted = _repositoryService.RepositoryExists(repoId);
 
             var info = await _repositoryService.CloneRepositoryAsync(request.Url, cancellationToken);
 
@@ -47,8 +52,16 @@ public class RepositoryController : ControllerBase
                 ClonedAt = info.ClonedAt,
                 LastFetchedAt = info.LastFetchedAt,
                 TotalCommits = info.TotalCommits,
-                TotalBranches = info.TotalBranches
+                TotalBranches = info.TotalBranches,
+                AlreadyExisted = alreadyExisted
             };
+
+            // Return 200 OK if repository already existed, 201 Created if newly cloned
+            if (alreadyExisted)
+            {
+                _logger.LogInformation("Repository already existed, fetched updates: {Id}", info.Id);
+                return Ok(response);
+            }
 
             return CreatedAtAction(nameof(GetRepository), new { id = info.Id }, response);
         }
@@ -156,5 +169,11 @@ public class RepositoryController : ControllerBase
         await _repositoryService.DeleteRepositoryAsync(id);
 
         return NoContent();
+    }
+
+    private static string GenerateRepositoryId(string url)
+    {
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url));
+        return Convert.ToHexString(hash)[..16].ToLowerInvariant();
     }
 }

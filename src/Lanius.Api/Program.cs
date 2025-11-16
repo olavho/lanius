@@ -34,7 +34,6 @@ builder.Services.AddSingleton<IReplayService, ReplayService>();
 builder.Services.AddSingleton<RepositoryMonitoringService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<RepositoryMonitoringService>());
 
-// Register SignalR-Replay bridge as singleton (uses IServiceProvider internally)
 builder.Services.AddSingleton<ReplaySignalRBridge>();
 
 // Configure CORS for frontend
@@ -59,22 +58,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Serve static files from Lanius.Web
-var webRoot = Path.Combine(Directory.GetCurrentDirectory(), "..", "Lanius.Web");
-if (Directory.Exists(webRoot))
-{
-    app.UseStaticFiles(new StaticFileOptions
-    {
-        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot),
-        RequestPath = ""
-    });
-
-    app.UseDefaultFiles(new DefaultFilesOptions
-    {
-        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot),
-        DefaultFileNames = new[] { "index.html" }
-    });
-}
+// Serve static files from Lanius.Web wwwroot
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseHttpsRedirection();
 

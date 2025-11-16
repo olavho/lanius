@@ -21,6 +21,10 @@
 
 ## Project Structure
 
+### Solution File
+- **.slnx** - XML-based Visual Studio solution file (root directory)
+- Use `dotnet sln` commands to manage projects in the solution
+
 ### Technology Stack
 - **.NET 10** - Target framework for all projects
 - **ASP.NET Core Web API** - API layer with SignalR support
@@ -32,6 +36,8 @@
 - `src/Lanius.Api/` - Web API project (controllers, SignalR hubs, configuration)
 - `src/Lanius.Business/` - **Business logic layer** (Git analysis, repository services, domain models)
 - `src/Lanius.Business.Test/` - **Unit tests** for business logic
+- `src/Lanius.Web/` - **Frontend web application** (HTML, CSS, JavaScript, D3.js visualizations)
+  - `wwwroot/` - Static web files served by ASP.NET Core
 - `docs/` - All project documentation
 - `docs/chat/` - Copilot analysis and summaries (chronologically organized)
 - `docs/plans/` - Implementation plans and roadmaps
@@ -45,6 +51,7 @@
 - SignalR hubs for real-time updates
 - Request/response DTOs
 - API configuration and middleware
+- Static file hosting (serves Lanius.Web wwwroot)
 - Authentication/authorization (when implemented)
 - **NO business logic** - delegate to `Lanius.Business`
 
@@ -68,6 +75,14 @@
   - Replay stream behavior
 - Use mocking frameworks (e.g., Moq, NSubstitute) for external dependencies
 - Aim for high code coverage of business logic
+
+#### **Lanius.Web** - Frontend Layer
+- **Static HTML, CSS, JavaScript files**
+- Located in `wwwroot/` following ASP.NET Core conventions
+- D3.js visualizations for commit graphs
+- SignalR client for real-time updates
+- Minimalist UI design
+- **NO server-side code** - pure static files served by Lanius.Api
 
 ### Code Conventions
 
@@ -95,6 +110,13 @@
 - Use observables for time-based commit streams
 - Implement proper disposal of subscriptions
 - Handle backpressure for large commit histories
+
+#### Frontend (Lanius.Web)
+- All static files must be placed in `wwwroot/`
+- Use D3.js for data visualizations
+- SignalR client for real-time communication with API
+- Minimize external dependencies (load from CDN)
+- Follow existing minimalist design patterns
 
 ## When Creating Documentation
 1. Determine if the content is analysis/chat ? save to `docs/chat/` with dated naming

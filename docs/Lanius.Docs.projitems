@@ -29,6 +29,7 @@
     <None Remove="$(MSBuildThisFileDirectory)*.projitems" />
     <None Include="$(MSBuildThisFileDirectory)authentication-and-troubleshooting.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-01-phase-1-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-01-web-project-separation.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-02-phase-2-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-03-test-failures-analysis.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-04-test-failures-fixed.md" />

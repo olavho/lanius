@@ -42,10 +42,45 @@ public class RepositoryService : IRepositoryService
 
         _logger?.LogInformation("Generated repository ID: {RepoId}, Local path: {LocalPath}", repoId, localPath);
 
+        // Check if repository already exists
+        if (Directory.Exists(localPath) && Repository.IsValid(localPath))
+        {
+            _logger?.LogInformation("Repository already exists at: {LocalPath}. Fetching updates instead.", localPath);
+            
+            try
+            {
+                // Fetch updates from remote
+                await FetchUpdatesAsync(repoId, cancellationToken);
+                _logger?.LogInformation("Successfully fetched updates for existing repository: {RepoId}", repoId);
+            }
+            catch (Exception fetchEx)
+            {
+                _logger?.LogWarning(fetchEx, "Failed to fetch updates for existing repository, returning existing info");
+            }
+            
+            // Return existing repository info
+            var existingInfo = await GetRepositoryInfoAsync(repoId);
+            if (existingInfo != null)
+            {
+                return existingInfo;
+            }
+        }
+
+        // Clean up invalid/partial directory if it exists
         if (Directory.Exists(localPath))
         {
-            _logger?.LogWarning("Repository already exists at: {LocalPath}", localPath);
-            throw new InvalidOperationException($"Repository already exists at {localPath}");
+            _logger?.LogWarning("Directory exists but is not a valid repository, cleaning up: {LocalPath}", localPath);
+            try
+            {
+                RemoveReadOnlyAttributes(localPath);
+                Directory.Delete(localPath, recursive: true);
+            }
+            catch (Exception cleanupEx)
+            {
+                _logger?.LogError(cleanupEx, "Failed to cleanup invalid repository directory");
+                throw new InvalidOperationException(
+                    $"Repository directory exists but is invalid and cannot be cleaned up: {localPath}", cleanupEx);
+            }
         }
 
         try
