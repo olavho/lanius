@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Lanius.Business.Models;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Lanius.Business.Services;
 
@@ -9,13 +10,13 @@ namespace Lanius.Business.Services;
 /// </summary>
 public class ReplayService : IReplayService
 {
-    private readonly ICommitAnalyzer _commitAnalyzer;
+    private readonly IServiceProvider _serviceProvider;
     private readonly Dictionary<string, ReplaySessionContext> _sessions = new();
     private readonly object _lock = new();
 
-    public ReplayService(ICommitAnalyzer commitAnalyzer)
+    public ReplayService(IServiceProvider serviceProvider)
     {
-        _commitAnalyzer = commitAnalyzer;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<ReplaySession> StartReplayAsync(
@@ -23,8 +24,12 @@ public class ReplayService : IReplayService
         ReplayOptions options,
         CancellationToken cancellationToken = default)
     {
+        // Create a scope to get ICommitAnalyzer
+        using var scope = _serviceProvider.CreateScope();
+        var commitAnalyzer = scope.ServiceProvider.GetRequiredService<ICommitAnalyzer>();
+
         // Get commits chronologically
-        var commits = await _commitAnalyzer.GetCommitsChronologicallyAsync(
+        var commits = await commitAnalyzer.GetCommitsChronologicallyAsync(
             repositoryId,
             options.StartDate,
             options.EndDate,

@@ -10,11 +10,11 @@ namespace Lanius.Api.Hubs;
 public class RepositoryHub : Hub
 {
     private readonly ILogger<RepositoryHub> _logger;
-    private readonly ReplaySignalRBridge? _replayBridge;
+    private readonly ReplaySignalRBridge _replayBridge;
 
     public RepositoryHub(
         ILogger<RepositoryHub> logger,
-        ReplaySignalRBridge? replayBridge = null)
+        ReplaySignalRBridge replayBridge)
     {
         _logger = logger;
         _replayBridge = replayBridge;
@@ -53,7 +53,7 @@ public class RepositoryHub : Hub
             Context.ConnectionId, sessionId);
 
         // Start streaming if not already started
-        _replayBridge?.StartStreaming(sessionId);
+        _replayBridge.StartStreaming(sessionId);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Text;
 using Lanius.Business.Configuration;
 using Lanius.Business.Models;
 using LibGit2Sharp;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Lanius.Business.Services;
@@ -13,10 +14,20 @@ namespace Lanius.Business.Services;
 public class RepositoryService : IRepositoryService
 {
     private readonly RepositoryStorageOptions _options;
+    private readonly ILogger<RepositoryService>? _logger;
 
-    public RepositoryService(IOptions<RepositoryStorageOptions> options)
+    public RepositoryService(IOptions<RepositoryStorageOptions> options, ILogger<RepositoryService>? logger = null)
     {
         _options = options.Value;
+        _logger = logger;
+
+        if (string.IsNullOrWhiteSpace(_options.BasePath))
+        {
+            throw new InvalidOperationException(
+                "Repository storage BasePath is not configured. Please set RepositoryStorage:BasePath in appsettings.json");
+        }
+
+        _logger?.LogInformation("Initializing RepositoryService with BasePath: {BasePath}", _options.BasePath);
         EnsureBasePathExists();
     }
 
@@ -24,27 +35,67 @@ public class RepositoryService : IRepositoryService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
 
+        _logger?.LogInformation("Starting clone operation for URL: {Url}", url);
+
         var repoId = GenerateRepositoryId(url);
         var localPath = GetRepositoryPath(repoId);
 
+        _logger?.LogInformation("Generated repository ID: {RepoId}, Local path: {LocalPath}", repoId, localPath);
+
         if (Directory.Exists(localPath))
         {
+            _logger?.LogWarning("Repository already exists at: {LocalPath}", localPath);
             throw new InvalidOperationException($"Repository already exists at {localPath}");
         }
 
-        await Task.Run(() =>
+        try
         {
-            var cloneOptions = new CloneOptions
+            _logger?.LogInformation("Calling LibGit2Sharp Repository.Clone...");
+            
+            await Task.Run(() =>
             {
-                Checkout = true,
-                RecurseSubmodules = false
-            };
+                var cloneOptions = new CloneOptions
+                {
+                    Checkout = true,
+                    RecurseSubmodules = false
+                };
 
-            Repository.Clone(url, localPath, cloneOptions);
-        }, cancellationToken);
+                Repository.Clone(url, localPath, cloneOptions);
+                
+                _logger?.LogInformation("Clone completed successfully");
+            }, cancellationToken);
 
-        return await GetRepositoryInfoAsync(repoId) 
-            ?? throw new InvalidOperationException("Failed to retrieve repository info after clone");
+            return await GetRepositoryInfoAsync(repoId) 
+                ?? throw new InvalidOperationException("Failed to retrieve repository info after clone");
+        }
+        catch (LibGit2SharpException ex)
+        {
+            _logger?.LogError(ex, "LibGit2Sharp exception during clone. Message: {Message}, InnerException: {Inner}",
+                ex.Message, ex.InnerException?.Message);
+
+            // Clean up partial clone if it exists
+            if (Directory.Exists(localPath))
+            {
+                try
+                {
+                    _logger?.LogInformation("Cleaning up partial clone at: {LocalPath}", localPath);
+                    RemoveReadOnlyAttributes(localPath);
+                    Directory.Delete(localPath, recursive: true);
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger?.LogWarning(cleanupEx, "Failed to cleanup partial clone");
+                }
+            }
+
+            // Wrap LibGit2Sharp exceptions with more user-friendly messages
+            throw new InvalidOperationException($"Failed to clone repository: {ex.Message}", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Unexpected exception during clone: {Message}", ex.Message);
+            throw;
+        }
     }
 
     public async Task<bool> FetchUpdatesAsync(string repositoryId, CancellationToken cancellationToken = default)
@@ -57,23 +108,31 @@ public class RepositoryService : IRepositoryService
             throw new InvalidOperationException($"Repository not found: {repositoryId}");
         }
 
-        return await Task.Run(() =>
+        try
         {
-            using var repo = new Repository(localPath);
-            var remote = repo.Network.Remotes["origin"];
-            if (remote == null)
+            return await Task.Run(() =>
             {
-                return false;
-            }
+                using var repo = new Repository(localPath);
+                var remote = repo.Network.Remotes["origin"];
+                if (remote == null)
+                {
+                    return false;
+                }
 
-            var refsBefore = repo.Refs.Count();
+                var refsBefore = repo.Refs.Count();
 
-            var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-            Commands.Fetch(repo, remote.Name, refSpecs, null, null);
+                var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
+                Commands.Fetch(repo, remote.Name, refSpecs, null, null);
 
-            var refsAfter = repo.Refs.Count();
-            return refsAfter > refsBefore;
-        }, cancellationToken);
+                var refsAfter = repo.Refs.Count();
+                return refsAfter > refsBefore;
+            }, cancellationToken);
+        }
+        catch (LibGit2SharpException ex)
+        {
+            _logger?.LogError(ex, "Failed to fetch updates for repository: {RepositoryId}", repositoryId);
+            throw new InvalidOperationException($"Failed to fetch updates: {ex.Message}", ex);
+        }
     }
 
     public Task<RepositoryInfo?> GetRepositoryInfoAsync(string repositoryId)
@@ -157,6 +216,7 @@ public class RepositoryService : IRepositoryService
     {
         if (!Directory.Exists(_options.BasePath))
         {
+            _logger?.LogInformation("Creating base path: {BasePath}", _options.BasePath);
             Directory.CreateDirectory(_options.BasePath);
         }
     }

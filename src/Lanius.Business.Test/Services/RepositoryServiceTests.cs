@@ -22,7 +22,7 @@ public class RepositoryServiceTests
             BasePath = _testBasePath
         });
 
-        _service = new RepositoryService(options);
+        _service = new RepositoryService(options, null);
     }
 
     [TestCleanup]

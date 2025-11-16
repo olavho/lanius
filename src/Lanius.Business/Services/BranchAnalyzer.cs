@@ -180,3 +180,4 @@ public class BranchAnalyzer : IBranchAnalyzer
         return branchName.Equals(pattern, StringComparison.OrdinalIgnoreCase);
     }
 }
+ 

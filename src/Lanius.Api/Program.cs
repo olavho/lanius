@@ -26,13 +26,15 @@ builder.Services.Configure<MonitoringOptions>(
 builder.Services.AddSingleton<IRepositoryService, RepositoryService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
+
+// ReplayService is singleton but uses IServiceProvider to create scopes for ICommitAnalyzer
 builder.Services.AddSingleton<IReplayService, ReplayService>();
 
 // Register background monitoring service
 builder.Services.AddSingleton<RepositoryMonitoringService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<RepositoryMonitoringService>());
 
-// Register SignalR-Replay bridge
+// Register SignalR-Replay bridge as singleton (uses IServiceProvider internally)
 builder.Services.AddSingleton<ReplaySignalRBridge>();
 
 // Configure CORS for frontend
@@ -40,7 +42,7 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://localhost:3000") // Adjust for your frontend
+        policy.WithOrigins("http://localhost:3000", "https://localhost:3000", "http://localhost:5000", "https://localhost:5001")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials(); // Required for SignalR
@@ -55,6 +57,23 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+
+// Serve static files from Lanius.Web
+var webRoot = Path.Combine(Directory.GetCurrentDirectory(), "..", "Lanius.Web");
+if (Directory.Exists(webRoot))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot),
+        RequestPath = ""
+    });
+
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRoot),
+        DefaultFileNames = new[] { "index.html" }
+    });
 }
 
 app.UseHttpsRedirection();

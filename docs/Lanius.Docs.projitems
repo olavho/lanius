@@ -27,6 +27,7 @@
     <!-- Exclude the project files themselves -->
     <None Remove="$(MSBuildThisFileDirectory)*.shproj" />
     <None Remove="$(MSBuildThisFileDirectory)*.projitems" />
+    <None Include="$(MSBuildThisFileDirectory)authentication-and-troubleshooting.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-01-phase-1-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-02-phase-2-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-03-test-failures-analysis.md" />
@@ -36,9 +37,12 @@
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-07-phase-3-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-08-phase-4-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-09-phase-5-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-10-phase-6-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-11-di-lifetime-fix.md" />
     <None Include="$(MSBuildThisFileDirectory)clarifications-needed.md" />
     <None Include="$(MSBuildThisFileDirectory)mvp-implementation-summary.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\2025.11.16-InitialPlan.md" />
+    <None Include="$(MSBuildThisFileDirectory)PROJECT-COMPLETE.md" />
     <None Include="$(MSBuildThisFileDirectory)replay-mode-guide.md" />
     <None Include="$(MSBuildThisFileDirectory)requirements-and-tech-stack.md" />
     <None Include="$(MSBuildThisFileDirectory)signalr-client-guide.md" />
