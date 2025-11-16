@@ -9,8 +9,10 @@ builder.Services.AddControllers();
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
 
-// Configure OpenAPI/Swagger
+// Configure OpenAPI
 builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 // Configure options
 builder.Services.Configure<RepositoryStorageOptions>(
@@ -40,6 +42,8 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
