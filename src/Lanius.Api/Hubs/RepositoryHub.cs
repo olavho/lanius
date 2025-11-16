@@ -1,18 +1,23 @@
 using Lanius.Api.DTOs;
+using Lanius.Api.Services;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Lanius.Api.Hubs;
 
 /// <summary>
-/// SignalR hub for real-time repository updates.
+/// SignalR hub for real-time repository updates and replay streaming.
 /// </summary>
 public class RepositoryHub : Hub
 {
     private readonly ILogger<RepositoryHub> _logger;
+    private readonly ReplaySignalRBridge? _replayBridge;
 
-    public RepositoryHub(ILogger<RepositoryHub> logger)
+    public RepositoryHub(
+        ILogger<RepositoryHub> logger,
+        ReplaySignalRBridge? replayBridge = null)
     {
         _logger = logger;
+        _replayBridge = replayBridge;
     }
 
     /// <summary>
@@ -35,6 +40,31 @@ public class RepositoryHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"repo:{repositoryId}");
         _logger.LogInformation("Client {ConnectionId} unsubscribed from repository {RepositoryId}", 
             Context.ConnectionId, repositoryId);
+    }
+
+    /// <summary>
+    /// Client subscribes to a replay session stream.
+    /// </summary>
+    /// <param name="sessionId">Replay session ID.</param>
+    public async Task SubscribeToReplay(string sessionId)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"replay:{sessionId}");
+        _logger.LogInformation("Client {ConnectionId} subscribed to replay session {SessionId}",
+            Context.ConnectionId, sessionId);
+
+        // Start streaming if not already started
+        _replayBridge?.StartStreaming(sessionId);
+    }
+
+    /// <summary>
+    /// Client unsubscribes from a replay session.
+    /// </summary>
+    /// <param name="sessionId">Replay session ID.</param>
+    public async Task UnsubscribeFromReplay(string sessionId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"replay:{sessionId}");
+        _logger.LogInformation("Client {ConnectionId} unsubscribed from replay session {SessionId}",
+            Context.ConnectionId, sessionId);
     }
 
     public override async Task OnConnectedAsync()

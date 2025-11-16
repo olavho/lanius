@@ -26,10 +26,14 @@ builder.Services.Configure<MonitoringOptions>(
 builder.Services.AddSingleton<IRepositoryService, RepositoryService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
+builder.Services.AddSingleton<IReplayService, ReplayService>();
 
 // Register background monitoring service
 builder.Services.AddSingleton<RepositoryMonitoringService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<RepositoryMonitoringService>());
+
+// Register SignalR-Replay bridge
+builder.Services.AddSingleton<ReplaySignalRBridge>();
 
 // Configure CORS for frontend
 builder.Services.AddCors(options =>
