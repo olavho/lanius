@@ -1,3 +1,5 @@
+using Lanius.Api.Hubs;
+using Lanius.Api.Services;
 using Lanius.Business.Configuration;
 using Lanius.Business.Services;
 
@@ -25,14 +27,19 @@ builder.Services.AddSingleton<IRepositoryService, RepositoryService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
 
+// Register background monitoring service
+builder.Services.AddSingleton<RepositoryMonitoringService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<RepositoryMonitoringService>());
+
 // Configure CORS for frontend
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:3000", "https://localhost:3000") // Adjust for your frontend
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials(); // Required for SignalR
     });
 });
 
@@ -54,7 +61,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Map SignalR hub (will be added in Phase 4)
-// app.MapHub<RepositoryHub>("/hubs/repository");
+// Map SignalR hub
+app.MapHub<RepositoryHub>("/hubs/repository");
 
 app.Run();

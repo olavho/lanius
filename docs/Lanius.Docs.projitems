@@ -34,10 +34,12 @@
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-05-resource-leak-fix.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-06-test-cleanup-fixed.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-07-phase-3-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-08-phase-4-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)clarifications-needed.md" />
     <None Include="$(MSBuildThisFileDirectory)mvp-implementation-summary.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\2025.11.16-InitialPlan.md" />
     <None Include="$(MSBuildThisFileDirectory)requirements-and-tech-stack.md" />
+    <None Include="$(MSBuildThisFileDirectory)signalr-client-guide.md" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="$(MSBuildThisFileDirectory)architecture\" />
