@@ -286,7 +286,7 @@ body {
     display: flex;
     flex-direction: column;
     position: relative;
-    overflow: hidden;
+    overflow-x: auto; /* Enable horizontal scrolling */
 }
 
 .canvas-header {
@@ -296,6 +296,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0; /* Don't shrink header */
 }
 
 .canvas-title {
@@ -317,6 +318,7 @@ body {
 .commit-graph {
     flex: 1;
     background: var(--bg-primary);
+    display: block;
 }
 
 /* Commit Detail Popup */
@@ -499,5 +501,23 @@ body {
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--line-color);
+}
+
+/* Scrollbar for visualization */
+.visualization-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.visualization-container::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+}
+
+.visualization-container::-webkit-scrollbar-thumb {
+    background: var(--line-color-light);
+    border-radius: 0;
+}
+
+.visualization-container::-webkit-scrollbar-thumb:hover {
     background: var(--line-color);
 }

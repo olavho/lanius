@@ -36,10 +36,10 @@ public class RepositoryServiceTests
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
-                
+
                 // Small delay to allow OS to release file locks
                 System.Threading.Thread.Sleep(100);
-                
+
                 Directory.Delete(_testBasePath, recursive: true);
             }
             catch
@@ -72,12 +72,12 @@ public class RepositoryServiceTests
         // Arrange - Create a local repository instead of cloning from GitHub
         var localRepoPath = CreateLocalTestRepository();
         var url = "test://fake-url";
-        
+
         // Manually create repository in service's storage
         var repoId = GenerateRepositoryId(url);
         var targetPath = Path.Combine(_testBasePath, repoId);
         Directory.Move(localRepoPath, targetPath);
-        
+
         // Add remote to repository
         using (var repo = new Repository(targetPath))
         {
@@ -103,7 +103,7 @@ public class RepositoryServiceTests
         var repoId = GenerateRepositoryId(url);
         var targetPath = Path.Combine(_testBasePath, repoId);
         Directory.Move(localRepoPath, targetPath);
-        
+
         // Add remote to repository
         using (var repo = new Repository(targetPath))
         {
@@ -117,7 +117,7 @@ public class RepositoryServiceTests
         Assert.IsNotNull(info);
         Assert.AreEqual(repoId, info.Id);
         Assert.AreEqual(url, info.Url);
-        Assert.IsTrue(info.TotalCommits > 0);
+        Assert.IsGreaterThan(0, info.TotalCommits);
     }
 
     [TestMethod]

@@ -20,12 +20,12 @@ public interface IBranchAnalyzer
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get branches matching a filter pattern (e.g., "main", "release/*").
+    /// Get branches matching specific patterns.
     /// </summary>
     /// <param name="repositoryId">The repository ID.</param>
-    /// <param name="patterns">Branch name patterns (supports wildcards).</param>
+    /// <param name="patterns">Branch name patterns (supports wildcards like "release/*").</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Filtered list of branches.</returns>
+    /// <returns>List of matching branches.</returns>
     Task<IReadOnlyList<Branch>> GetBranchesByPatternAsync(
         string repositoryId,
         IEnumerable<string> patterns,
@@ -40,7 +40,7 @@ public interface IBranchAnalyzer
     Task<Branch?> GetBranchAsync(string repositoryId, string branchName);
 
     /// <summary>
-    /// Calculate divergence between two branches (commits ahead/behind).
+    /// Calculate how far ahead/behind one branch is from another.
     /// </summary>
     /// <param name="repositoryId">The repository ID.</param>
     /// <param name="baseBranch">The base branch name.</param>
@@ -62,4 +62,16 @@ public interface IBranchAnalyzer
         string repositoryId,
         string branch1,
         string branch2);
+
+    /// <summary>
+    /// Get a simplified branch overview with only significant commits (branch heads and merge bases).
+    /// </summary>
+    /// <param name="repositoryId">The repository ID.</param>
+    /// <param name="branchNames">List of branch names to analyze.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Branch overview with significant commits.</returns>
+    Task<BranchOverview> GetBranchOverviewAsync(
+        string repositoryId,
+        IEnumerable<string> branchNames,
+        CancellationToken cancellationToken = default);
 }

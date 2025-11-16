@@ -1,6 +1,6 @@
 using Lanius.Business.Services;
-using Moq;
 using LibGit2Sharp;
+using Moq;
 using DomainBranch = Lanius.Business.Models.Branch;
 using DomainRepositoryInfo = Lanius.Business.Models.RepositoryInfo;
 
@@ -29,7 +29,7 @@ public class BranchAnalyzerTests
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
-        
+
         // Small delay to allow OS to release file locks
         System.Threading.Thread.Sleep(100);
 
@@ -60,8 +60,8 @@ public class BranchAnalyzerTests
         // Act & Assert
         var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             () => _analyzer.GetBranchesAsync(_testRepoId));
-        
-        Assert.IsTrue(exception.Message.Contains("not found"));
+
+        Assert.Contains("not found", exception.Message);
     }
 
     [TestMethod]
@@ -76,7 +76,7 @@ public class BranchAnalyzerTests
 
         // Assert
         Assert.IsNotNull(branches);
-        Assert.IsTrue(branches.Count > 0);
+        Assert.IsNotEmpty(branches);
         Assert.IsNotNull(branches[0].Name);
         Assert.IsNotNull(branches[0].TipSha);
     }
@@ -97,7 +97,7 @@ public class BranchAnalyzerTests
 
         // Assert
         Assert.IsNotNull(branches);
-        Assert.IsTrue(branches.Count > 0);
+        Assert.IsNotEmpty(branches);
         Assert.IsTrue(branches.Any(b => b.Name == defaultBranch));
     }
 
@@ -160,8 +160,8 @@ public class BranchAnalyzerTests
         var (ahead, behind) = await _analyzer.GetBranchDivergenceAsync(_testRepoId, "main", "feature");
 
         // Assert
-        Assert.IsTrue(ahead >= 0);
-        Assert.IsTrue(behind >= 0);
+        Assert.IsGreaterThanOrEqualTo(0, ahead);
+        Assert.IsGreaterThanOrEqualTo(0, behind);
     }
 
     [TestMethod]
@@ -176,7 +176,7 @@ public class BranchAnalyzerTests
 
         // Assert
         Assert.IsNotNull(commonAncestor);
-        Assert.IsTrue(commonAncestor.Length == 40); // SHA length
+        Assert.AreEqual(40, commonAncestor.Length); // SHA length
     }
 
     private string CreateTemporaryRepository()
@@ -252,11 +252,11 @@ public class BranchAnalyzerTests
     private void SetupMockRepository(string localPath)
     {
         _mockRepoService.Setup(x => x.RepositoryExists(_testRepoId)).Returns(true);
-        
+
         // Get the actual default branch name
         using var repo = new Repository(localPath);
         var defaultBranch = repo.Head.FriendlyName;
-        
+
         _mockRepoService.Setup(x => x.GetRepositoryInfoAsync(_testRepoId))
             .ReturnsAsync(new DomainRepositoryInfo
             {

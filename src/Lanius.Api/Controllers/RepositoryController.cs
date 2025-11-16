@@ -118,7 +118,8 @@ public class RepositoryController : ControllerBase
             ClonedAt = info.ClonedAt,
             LastFetchedAt = info.LastFetchedAt,
             TotalCommits = info.TotalCommits,
-            TotalBranches = info.TotalBranches
+            TotalBranches = info.TotalBranches,
+            AlreadyExisted = false // Always false for GET endpoint
         });
     }
 

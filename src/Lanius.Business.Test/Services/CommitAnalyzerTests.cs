@@ -1,7 +1,6 @@
-using Lanius.Business.Models;
 using Lanius.Business.Services;
-using Moq;
 using LibGit2Sharp;
+using Moq;
 using DomainCommit = Lanius.Business.Models.Commit;
 using DomainDiffStats = Lanius.Business.Models.DiffStats;
 using DomainRepositoryInfo = Lanius.Business.Models.RepositoryInfo;
@@ -31,7 +30,7 @@ public class CommitAnalyzerTests
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
-        
+
         // Small delay to allow OS to release file locks
         System.Threading.Thread.Sleep(100);
 
@@ -62,8 +61,8 @@ public class CommitAnalyzerTests
         // Act & Assert
         var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             () => _analyzer.GetCommitsAsync(_testRepoId));
-        
-        Assert.IsTrue(exception.Message.Contains("not found"));
+
+        Assert.Contains("not found", exception.Message);
     }
 
     [TestMethod]
@@ -92,7 +91,7 @@ public class CommitAnalyzerTests
 
         // Assert
         Assert.IsNotNull(commits);
-        Assert.IsTrue(commits.Count > 0);
+        Assert.IsNotEmpty(commits);
         Assert.IsNotNull(commits[0].Sha);
         Assert.IsNotNull(commits[0].Author);
         Assert.IsNotNull(commits[0].Message);
@@ -110,7 +109,7 @@ public class CommitAnalyzerTests
 
         // Assert
         Assert.IsNotNull(commits);
-        Assert.IsTrue(commits.Count > 0);
+        Assert.IsNotEmpty(commits);
 
         // Verify chronological order
         for (int i = 1; i < commits.Count; i++)
@@ -126,7 +125,7 @@ public class CommitAnalyzerTests
         // Arrange
         var tempPath = CreateTemporaryRepository();
         SetupMockRepository(tempPath);
-        
+
         IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsAsync(_testRepoId);
         var firstCommitSha = commits[0].Sha;
 
@@ -135,9 +134,9 @@ public class CommitAnalyzerTests
 
         // Assert
         Assert.IsNotNull(stats);
-        Assert.IsTrue(stats.LinesAdded >= 0);
-        Assert.IsTrue(stats.LinesRemoved >= 0);
-        Assert.IsTrue(stats.FilesChanged >= 0);
+        Assert.IsGreaterThanOrEqualTo(0, stats.LinesAdded);
+        Assert.IsGreaterThanOrEqualTo(0, stats.LinesRemoved);
+        Assert.IsGreaterThanOrEqualTo(0, stats.FilesChanged);
     }
 
     [TestMethod]
@@ -196,11 +195,11 @@ public class CommitAnalyzerTests
     private void SetupMockRepository(string localPath)
     {
         _mockRepoService.Setup(x => x.RepositoryExists(_testRepoId)).Returns(true);
-        
+
         // Get the actual default branch name
         using var repo = new Repository(localPath);
         var defaultBranch = repo.Head.FriendlyName;
-        
+
         _mockRepoService.Setup(x => x.GetRepositoryInfoAsync(_testRepoId))
             .ReturnsAsync(new DomainRepositoryInfo
             {

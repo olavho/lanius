@@ -8,6 +8,7 @@ let state = {
     connection: null,
     commits: [],
     branches: [],
+    relationships: [], // Add relationships array
     replaySessionId: null,
     replaySpeed: 1.0,
     stats: {
@@ -100,9 +101,18 @@ async function cloneRepository() {
         }
 
         const repo = await response.json();
+        
+        // Clear previous repository state
+        if (state.repositoryId && state.repositoryId !== repo.id) {
+            clearRepositoryState();
+        }
+        
         state.repositoryId = repo.id;
         
-        updateStatus('repo-status', `Cloned: ${repo.defaultBranch} (${repo.totalCommits} commits)`);
+        const statusMessage = repo.alreadyExisted 
+            ? `Repository updated: ${repo.defaultBranch} (${repo.totalCommits} commits)`
+            : `Cloned: ${repo.defaultBranch} (${repo.totalCommits} commits)`;
+        updateStatus('repo-status', statusMessage);
         updateStats(repo);
         
         // Load commits and branches
@@ -114,30 +124,135 @@ async function cloneRepository() {
     }
 }
 
+function clearRepositoryState() {
+    // Clear state
+    state.commits = [];
+    state.branches = [];
+    state.relationships = [];
+    state.replaySessionId = null;
+    
+    // Clear visualization
+    clearVisualization();
+    
+    // Reset stats
+    state.stats = {
+        totalCommits: 0,
+        totalBranches: 0,
+        linesAdded: 0,
+        linesRemoved: 0
+    };
+    
+    document.getElementById('stat-commits').textContent = '0';
+    document.getElementById('stat-branches').textContent = '0';
+    document.getElementById('stat-additions').textContent = '+0';
+    document.getElementById('stat-deletions').textContent = '-0';
+    
+    // Reset UI elements
+    updateCanvasInfo('No repository loaded');
+    setReplayButtonState(false);
+    
+    console.log('Repository state cleared');
+}
+
 async function loadRepository() {
     if (!state.repositoryId) return;
 
     try {
-        // Load branches
-        const branchesResponse = await fetch(
-            `${API_URL}/api/repositories/${state.repositoryId}/branches?includeRemote=false`
-        );
-        state.branches = await branchesResponse.json();
+        updateStatus('repo-status', 'Loading branch overview...');
+        
+        // Get branch filter patterns - handle empty/whitespace properly
+        const branchFilterInput = document.getElementById('branch-pattern').value;
+        const branchFilter = branchFilterInput ? branchFilterInput.trim() : '';
+        const hasFilter = branchFilter.length > 0;
+        
+        console.log('Branch filter input:', `"${branchFilterInput}"`);
+        console.log('Has filter:', hasFilter);
+        
+        // Use the new overview endpoint that returns only significant commits
+        // Note: includeRemote defaults to true on the server
+        let overviewUrl = `${API_URL}/api/repositories/${state.repositoryId}/branches/overview`;
+        if (hasFilter) {
+            const patterns = branchFilter.split(',').map(p => p.trim()).filter(p => p.length > 0);
+            console.log('Parsed patterns:', patterns);
+            if (patterns.length > 0) {
+                const queryParams = patterns.map(p => `patterns=${encodeURIComponent(p)}`).join('&');
+                overviewUrl += `?${queryParams}`;
+            }
+        }
+        
+        console.log('Fetching branch overview from:', overviewUrl);
+        const overviewResponse = await fetch(overviewUrl);
+        if (!overviewResponse.ok) {
+            const errorText = await overviewResponse.text();
+            console.error('API Error Response:', errorText);
+            throw new Error(`Failed to load branch overview: ${overviewResponse.statusText}`);
+        }
+        
+        const overview = await overviewResponse.json();
+        console.log('=== BRANCH OVERVIEW LOADED ===');
+        console.log('Full response keys:', Object.keys(overview));
+        console.log('- Branches:', overview.branches.length, 'First 5:', overview.branches.slice(0, 5).map(b => b.name));
+        console.log('- Significant commits:', overview.significantCommits.length);
+        console.log('- Relationships:', overview.relationships.length);
 
-        // Load commits
-        const commitsResponse = await fetch(
-            `${API_URL}/api/repositories/${state.repositoryId}/commits`
-        );
-        state.commits = await commitsResponse.json();
+        // Extract branches and commits from overview
+        state.branches = overview.branches.map(b => ({
+            name: b.name,
+            tipSha: b.headSha,
+            timestamp: b.headTimestamp
+        }));
+
+        state.commits = overview.significantCommits.map(c => ({
+            sha: c.sha,
+            author: c.author,
+            authorEmail: '', // Not included in overview
+            timestamp: c.timestamp,
+            message: c.shortMessage,
+            shortMessage: c.shortMessage,
+            parentShas: [], // We don't need parent relationships for overview
+            isMerge: false,
+            stats: c.stats,
+            branches: c.branches,
+            significance: c.type // Store the significance type
+        }));
+
+        // Store relationships for visualization
+        state.relationships = overview.relationships || [];
+
+        console.log(`Loaded ${state.branches.length} branches and ${state.commits.length} significant commits`);
+        console.log('Relationships:', state.relationships);
+
+        // Check if we have data to render
+        if (state.commits.length === 0) {
+            updateStatus('repo-status', 'No commits found', true);
+            updateCanvasInfo('No commits to display');
+            clearVisualization();
+            return;
+        }
+        
+        if (state.branches.length === 0) {
+            updateStatus('repo-status', 'No branches found matching filter', true);
+            updateCanvasInfo('No branches to display');
+            clearVisualization();
+            return;
+        }
 
         // Render visualization
+        console.log('Calling renderVisualization with', state.commits.length, 'commits and', state.branches.length, 'branches');
         renderVisualization();
         
-        updateCanvasInfo(`${state.commits.length} commits, ${state.branches.length} branches`);
+        const commitTypeBreakdown = overview.significantCommits.reduce((acc, c) => {
+            acc[c.type] = (acc[c.type] || 0) + 1;
+            return acc;
+        }, {});
+        console.log('Commit types:', commitTypeBreakdown);
+        
+        updateCanvasInfo(`${state.commits.length} significant commits (${state.branches.length} branches)`);
+        updateStatus('repo-status', `Loaded overview: ${state.commits.length} commits, ${state.branches.length} branches`);
         
     } catch (err) {
         console.error('Load error:', err);
-        updateStatus('repo-status', 'Failed to load repository data', true);
+        updateStatus('repo-status', `Error: ${err.message}`, true);
     }
 }
 
