@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../smq/docs/Docs.csproj" />
+  <Project Path="src/Lanius.Business.Test/Lanius.Business.Test.csproj" />
+  <Project Path="src/Lanius.Business/Lanius.Business.csproj" />
+  <Project Path="src/Lanius.Web/Lanius.Web.csproj" />
+</Solution>
