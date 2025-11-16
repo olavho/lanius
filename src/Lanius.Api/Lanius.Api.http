@@ -1,0 +1,6 @@
+@Lanius.Api_HostAddress = http://localhost:5104
+
+GET {{Lanius.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,6 +1,8 @@
 <Solution>
-  <Project Path="../smq/docs/Docs.csproj" />
+  <Folder Name="/Overview/">
+    <File Path="readme.md" />
+  </Folder>
+  <Project Path="docs/Lanius.Docs.shproj" Id="a5b8c7d6-e4f3-4a2b-9c1d-8e7f6a5b4c3d" />
   <Project Path="src/Lanius.Business.Test/Lanius.Business.Test.csproj" />
   <Project Path="src/Lanius.Business/Lanius.Business.csproj" />
-  <Project Path="src/Lanius.Web/Lanius.Web.csproj" />
 </Solution>

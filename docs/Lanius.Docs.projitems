@@ -11,25 +11,28 @@
   <ItemGroup>
     <!-- Automatically include all markdown files -->
     <None Include="$(MSBuildThisFileDirectory)**\*.md" />
-    
     <!-- Automatically include all text files -->
     <None Include="$(MSBuildThisFileDirectory)**\*.txt" />
-    
     <!-- Automatically include other common documentation formats -->
     <None Include="$(MSBuildThisFileDirectory)**\*.json" />
     <None Include="$(MSBuildThisFileDirectory)**\*.yaml" />
     <None Include="$(MSBuildThisFileDirectory)**\*.yml" />
     <None Include="$(MSBuildThisFileDirectory)**\*.xml" />
-    
     <!-- Automatically include image files -->
     <None Include="$(MSBuildThisFileDirectory)**\*.png" />
     <None Include="$(MSBuildThisFileDirectory)**\*.jpg" />
     <None Include="$(MSBuildThisFileDirectory)**\*.jpeg" />
     <None Include="$(MSBuildThisFileDirectory)**\*.gif" />
     <None Include="$(MSBuildThisFileDirectory)**\*.svg" />
-    
     <!-- Exclude the project files themselves -->
     <None Remove="$(MSBuildThisFileDirectory)*.shproj" />
     <None Remove="$(MSBuildThisFileDirectory)*.projitems" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="$(MSBuildThisFileDirectory)architecture\" />
+    <Folder Include="$(MSBuildThisFileDirectory)chat\" />
+    <Folder Include="$(MSBuildThisFileDirectory)devops\" />
+    <Folder Include="$(MSBuildThisFileDirectory)design\" />
+    <Folder Include="$(MSBuildThisFileDirectory)plans\" />
   </ItemGroup>
 </Project>
