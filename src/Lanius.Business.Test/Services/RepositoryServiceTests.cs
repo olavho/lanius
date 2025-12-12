@@ -1,7 +1,7 @@
 using Lanius.Business.Configuration;
 using Lanius.Business.Services;
-using Microsoft.Extensions.Options;
 using LibGit2Sharp;
+using Microsoft.Extensions.Options;
 
 namespace Lanius.Business.Test.Services;
 

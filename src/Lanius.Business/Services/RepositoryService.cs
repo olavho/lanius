@@ -1,10 +1,10 @@
-using System.Security.Cryptography;
-using System.Text;
 using Lanius.Business.Configuration;
 using Lanius.Business.Models;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Lanius.Business.Services;
 
@@ -46,7 +46,7 @@ public class RepositoryService : IRepositoryService
         if (Directory.Exists(localPath) && Repository.IsValid(localPath))
         {
             _logger?.LogInformation("Repository already exists at: {LocalPath}. Fetching updates instead.", localPath);
-            
+
             try
             {
                 // Fetch updates from remote
@@ -57,7 +57,7 @@ public class RepositoryService : IRepositoryService
             {
                 _logger?.LogWarning(fetchEx, "Failed to fetch updates for existing repository, returning existing info");
             }
-            
+
             // Return existing repository info
             var existingInfo = await GetRepositoryInfoAsync(repoId);
             if (existingInfo != null)
@@ -86,7 +86,7 @@ public class RepositoryService : IRepositoryService
         try
         {
             _logger?.LogInformation("Calling LibGit2Sharp Repository.Clone...");
-            
+
             await Task.Run(() =>
             {
                 var cloneOptions = new CloneOptions
@@ -95,12 +95,16 @@ public class RepositoryService : IRepositoryService
                     RecurseSubmodules = false
                 };
 
+                // Add default credentials provider
+                cloneOptions.FetchOptions.CredentialsProvider = (_url, _user, _cred) =>
+                        new DefaultCredentials();
+
                 Repository.Clone(url, localPath, cloneOptions);
-                
+
                 _logger?.LogInformation("Clone completed successfully");
             }, cancellationToken);
 
-            return await GetRepositoryInfoAsync(repoId) 
+            return await GetRepositoryInfoAsync(repoId)
                 ?? throw new InvalidOperationException("Failed to retrieve repository info after clone");
         }
         catch (LibGit2SharpException ex)
@@ -157,7 +161,11 @@ public class RepositoryService : IRepositoryService
                 var refsBefore = repo.Refs.Count();
 
                 var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-                Commands.Fetch(repo, remote.Name, refSpecs, null, null);
+                var fetchOptions = new FetchOptions();
+                fetchOptions.CredentialsProvider = (_url, _user, _cred) =>
+                    new DefaultCredentials();
+
+                Commands.Fetch(repo, remote.Name, refSpecs, fetchOptions, null);
 
                 var refsAfter = repo.Refs.Count();
                 return refsAfter > refsBefore;
@@ -181,15 +189,15 @@ public class RepositoryService : IRepositoryService
         }
 
         using var repo = new Repository(localPath);
-        
+
         var defaultBranch = repo.Head.FriendlyName;
         var totalCommits = repo.Commits.Count();
         var totalBranches = repo.Branches.Count();
 
         // Try to get clone timestamp from .git directory creation time
         var gitDir = Path.Combine(localPath, ".git");
-        var clonedAt = Directory.Exists(gitDir) 
-            ? Directory.GetCreationTimeUtc(gitDir) 
+        var clonedAt = Directory.Exists(gitDir)
+            ? Directory.GetCreationTimeUtc(gitDir)
             : DateTimeOffset.UtcNow;
 
         // Get URL from remote origin
@@ -213,7 +221,7 @@ public class RepositoryService : IRepositoryService
     public bool RepositoryExists(string repositoryId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryId);
-        
+
         var localPath = GetRepositoryPath(repositoryId);
         return Repository.IsValid(localPath);
     }
