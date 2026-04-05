@@ -297,14 +297,18 @@ function resetZoom() {
 ### Phase 4: Calendar Layout Engine
 **Goal**: Group commits by calendar periods with zoom-aware granularity
 
-**Status**: ❌ **NOT STARTED**
+**Status**: 🔄 **IN PROGRESS** - Backend Complete, API/Frontend Pending
 
 **Tasks**:
-1. ❌ Create `CalendarLayoutEngine.cs`
-2. ❌ Implement grouping by day/week/month/year
-3. ❌ Calculate aggregate stats per group (commit count, lines changed)
-4. ❌ Position groups as bars or blocks
-5. ❌ Add zoom threshold detection for granularity switching
+1. ✅ Create `CalendarLayoutEngine.cs`
+2. ✅ Implement grouping by day/week/month/year (Month-only MVP for Phase 4a)
+3. ✅ Calculate aggregate stats per group (commit count, period labels)
+4. ✅ Position groups as nodes (single horizontal row MVP)
+5. ✅ Add comprehensive unit tests (18 tests, all passing)
+6. ⏳ Wire up to API endpoint (LayoutController)
+7. ⏳ Frontend calendar rendering (visualization.js)
+8. ⏳ Mode switcher UI (Logical/Calendar toggle)
+9. ❌ Zoom threshold detection for granularity switching (deferred to Phase 4b)
 
 **Algorithm**:
 ```
