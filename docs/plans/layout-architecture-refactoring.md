@@ -29,6 +29,31 @@ Clear separation into three layers:
 
 ---
 
+## Architecture Decisions
+
+### Decision: Pixel Coordinates vs. Logical Grid (2026-04-05)
+
+**Context**: Layout engines currently calculate absolute pixel positions (e.g., `x: 450.5, y: 120.0`). An alternative approach would be logical grid coordinates (e.g., `row: 3, columnPercent: 0.45`) with frontend scaling to viewport.
+
+**Decision**: Continue with pixel-based coordinates for now, defer to Phase 6.
+
+**Rationale**:
+- Current implementation works well with D3 zoom/pan
+- Pixel-based approach is simpler (single coordinate system)
+- Don't want to delay Phase 4 (Calendar Layout) for architectural refactoring
+- Can implement both layout engines first, then refactor both together in Phase 6
+- Having working examples will inform better architectural decisions
+
+**Trade-offs**:
+- Backend is viewport-aware (knows about pixel spacing)
+- Less separation of concerns (mixed logical/visual)
+- +Simpler for now, faster to Phase 4
+- +D3 zoom handles viewport adaptation elegantly
+
+**Future**: Phase 6 may refactor to logical coordinates if needed, but only after evaluating both layout engines in production.
+
+---
+
 ## Proposed Architecture
 
 ### Phase 1: Business Layer Reorganization

@@ -2,6 +2,7 @@ using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
 using Lanius.Business.Models;
 using Lanius.Business.Services;
+using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace Lanius.Business.Test.Layout;
@@ -19,6 +20,9 @@ public class LogicalLayoutEngineTests
 {
     private Mock<ICommitAnalyzer> _mockCommitAnalyzer = null!;
     private Mock<IBranchAnalyzer> _mockBranchAnalyzer = null!;
+    private Mock<IRepositoryService> _mockRepositoryService = null!;
+    private Mock<ILoggerFactory> _mockLoggerFactory = null!;
+    private Mock<ILogger<LogicalLayoutEngine>> _mockLogger = null!;
     private LogicalLayoutEngine _layoutEngine = null!;
 
     public TestContext TestContext { get; set; }
@@ -28,10 +32,33 @@ public class LogicalLayoutEngineTests
     {
         _mockCommitAnalyzer = new Mock<ICommitAnalyzer>();
         _mockBranchAnalyzer = new Mock<IBranchAnalyzer>();
+        _mockRepositoryService = new Mock<IRepositoryService>();
+        _mockLogger = new Mock<ILogger<LogicalLayoutEngine>>();
+        _mockLoggerFactory = new Mock<ILoggerFactory>();
+
+        // Setup logger factory to return the mock logger
+        _mockLoggerFactory
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(_mockLogger.Object);
+
+        // Setup repository service to return a valid repository info
+        _mockRepositoryService
+            .Setup(x => x.GetRepositoryInfoAsync(It.IsAny<string>()))
+            .ReturnsAsync(new RepositoryInfo
+            {
+                Id = "test-repo",
+                Url = "https://github.com/test/repo",
+                LocalPath = @"C:\temp\test-repo",
+                DefaultBranch = "main",
+                ClonedAt = DateTimeOffset.UtcNow,
+                LastFetchedAt = DateTimeOffset.UtcNow
+            });
 
         _layoutEngine = new LogicalLayoutEngine(
             _mockCommitAnalyzer.Object,
-            _mockBranchAnalyzer.Object);
+            _mockBranchAnalyzer.Object,
+            _mockRepositoryService.Object,
+            _mockLoggerFactory.Object);
     }
 
     [TestMethod]
@@ -42,7 +69,7 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([.. new List<Branch>()]);
 
         // Act
@@ -83,11 +110,11 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit]);
 
         // Act
@@ -143,11 +170,11 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit1, commit2]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -189,11 +216,11 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mergeCommit]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -248,15 +275,15 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit1]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "develop", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "develop", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit2]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -301,7 +328,7 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -347,11 +374,11 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit]);
 
         // Act
@@ -447,15 +474,15 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainBranch, featureBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainCommit]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "feature", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainCommit, featureCommit]); // Feature includes parent from main
 
         // Act
@@ -528,14 +555,14 @@ public class LogicalLayoutEngineTests
         };
 
         _mockBranchAnalyzer
-            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainBranch, featureBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([baseCommit, mergeCommit]);
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsAsync(repositoryId, "feature", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([baseCommit, featureCommit]);
 
         // Act

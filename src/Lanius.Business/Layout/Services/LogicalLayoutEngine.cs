@@ -1,5 +1,6 @@
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Services;
+using Microsoft.Extensions.Logging;
 
 namespace Lanius.Business.Layout.Services;
 
@@ -9,8 +10,11 @@ namespace Lanius.Business.Layout.Services;
 /// </summary>
 public class LogicalLayoutEngine(
     ICommitAnalyzer commitAnalyzer,
-    IBranchAnalyzer branchAnalyzer) : ILayoutEngine
+    IBranchAnalyzer branchAnalyzer,
+    IRepositoryService repositoryService,
+    ILoggerFactory loggerFactory) : ILayoutEngine
 {
+    private readonly ILogger<LogicalLayoutEngine> _logger = loggerFactory.CreateLogger<LogicalLayoutEngine>();
     public async Task<LayoutResult> CalculateLayoutAsync(
         string repositoryId,
         LayoutOptions options,
@@ -79,7 +83,7 @@ public class LogicalLayoutEngine(
     {
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
-            return [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: false, cancellationToken))];
+            return [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken))];
         }
 
         var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -92,28 +96,73 @@ public class LogicalLayoutEngine(
         IProgress<LayoutProgress>? progress,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Loading commits for {BranchCount} branches using branch hierarchy optimization", branches.Count);
+
+        // Phase 1: Analyze branch hierarchy (10-20% of progress)
+        progress?.Report(new LayoutProgress(10, "Analyzing branch hierarchy...", 0, branches.Count));
+
+        var hierarchyAnalyzer = new BranchHierarchyAnalyzer(
+            repositoryService,
+            loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
+
+        var hierarchyInfo = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
+            repositoryId,
+            branches,
+            new Progress<LayoutProgress>(p =>
+            {
+                // Scale hierarchy progress from 10% to 20%
+                var scaledPercentage = 10 + (int)(p.Percentage * 0.1);
+                progress?.Report(new LayoutProgress(
+                    scaledPercentage,
+                    $"Analyzing hierarchy: {p.Operation}",
+                    p.ProcessedItems,
+                    p.TotalItems));
+            }),
+            cancellationToken);
+
+        _logger.LogInformation("Branch hierarchy analysis complete. Loading commits per branch...");
+
+        // Phase 2: Load commits per branch (20-60% of progress)
         var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
         int processedBranches = 0;
-        int totalBranches = branches.Count;
+        int totalBranches = hierarchyInfo.Count;
 
-        foreach (var branch in branches)
+        foreach (var branchInfo in hierarchyInfo)
         {
-            // Report progress BEFORE loading (so user knows we're working on this branch)
-            int percentage = 10 + (int)((processedBranches / (double)totalBranches) * 40);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Report progress BEFORE loading
+            int percentage = 20 + (int)((processedBranches / (double)totalBranches) * 40);
             progress?.Report(new LayoutProgress(
                 percentage,
-                $"Loading commits: {branch.Name} ({processedBranches + 1}/{totalBranches})",
+                $"Loading commits: {branchInfo.Name} ({processedBranches + 1}/{totalBranches})",
                 processedBranches,
                 totalBranches));
 
-            var commits = await commitAnalyzer.GetCommitsAsync(
+            _logger.LogDebug("Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
+                branchInfo.Name,
+                branchInfo.Tier,
+                branchInfo.MergeBaseSha?[..8] ?? "none",
+                branchInfo.CommitCount);
+
+            // Use optimized loading: only commits since merge base
+            var commits = await commitAnalyzer.GetCommitsSinceAsync(
                 repositoryId,
-                branch.Name,
+                branchInfo.Name,
+                branchInfo.MergeBaseSha, // null for main branch (loads all)
                 cancellationToken);
 
-            result[branch.Name] = [.. commits];
+            result[branchInfo.Name] = [.. commits];
+
+            _logger.LogDebug("Loaded {ActualCommits} commits for branch {BranchName}",
+                commits.Count,
+                branchInfo.Name);
+
             processedBranches++;
         }
+
+        var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
+        _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);
 
         return result;
     }

@@ -29,6 +29,21 @@ public interface ICommitAnalyzer
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get commits from a branch since a specific commit (merge base).
+    /// Optimized for branch visualization - only loads commits after branch point.
+    /// </summary>
+    /// <param name="repositoryId">The repository ID.</param>
+    /// <param name="branchName">Branch name.</param>
+    /// <param name="sinceCommitSha">SHA of commit to exclude (merge base). If null, returns all commits.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of commits since the specified commit.</returns>
+    Task<IReadOnlyList<Commit>> GetCommitsSinceAsync(
+        string repositoryId,
+        string branchName,
+        string? sinceCommitSha = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get commits in chronological order (for replay mode).
     /// </summary>
     /// <param name="repositoryId">The repository ID.</param>

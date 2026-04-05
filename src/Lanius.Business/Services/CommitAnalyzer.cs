@@ -148,6 +148,38 @@ public class CommitAnalyzer(IRepositoryService repositoryService) : ICommitAnaly
         return [.. branch.Commits];
     }
 
+    public async Task<IReadOnlyList<DomainCommit>> GetCommitsSinceAsync(
+        string repositoryId,
+        string branchName,
+        string? sinceCommitSha = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            using var repo = OpenRepository(repositoryId);
+
+            var branch = repo.Branches[branchName]
+                ?? throw new InvalidOperationException($"Branch not found: {branchName}");
+
+            IEnumerable<GitCommit> commits;
+
+            if (sinceCommitSha == null)
+            {
+                // No merge base - return all commits
+                commits = branch.Commits;
+            }
+            else
+            {
+                // Manually filter commits: stop at merge base
+                commits = branch.Commits.TakeWhile(c => c.Sha != sinceCommitSha);
+            }
+
+            // Map to domain commits
+            return commits.Select(c => MapCommit(c, repo)).ToList() as IReadOnlyList<DomainCommit>;
+
+        }, cancellationToken);
+    }
+
     private static List<string> GetBranchesForCommit(Repository repo, GitCommit commit)
     {
         var branches = repo.Branches

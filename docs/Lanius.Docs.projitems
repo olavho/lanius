@@ -61,6 +61,10 @@
     <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-05-layout-progress-granular-fix.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-06-phase-3-zoom-pan-implementation.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-07-phase-3-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-08-critical-bugs-analysis.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-09-hierarchy-implementation-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-10-frontend-fix-instructions.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\TESTING-QUICK-START.md" />
     <None Include="$(MSBuildThisFileDirectory)clarifications-needed.md" />
     <None Include="$(MSBuildThisFileDirectory)mvp-implementation-summary.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\2025.11.16-InitialPlan.md" />
