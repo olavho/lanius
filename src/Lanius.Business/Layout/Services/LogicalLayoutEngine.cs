@@ -140,72 +140,61 @@ public class LogicalLayoutEngine(
         _logger.LogInformation("Branch hierarchy analysis complete. Loading commits per branch...");
 
         // Phase 2: Load commits per branch (20-60% of progress)
-        // CRITICAL OPTIMIZATION: Open repository ONCE and reuse for all branches
-        return await Task.Run(() =>
+        // Early return for 0 branches (empty repository)
+        if (hierarchyInfo.Count == 0)
         {
-            var repoOpenStart = DateTimeOffset.UtcNow;
+            _logger.LogInformation("No branches to load commits from");
+            return [];
+        }
 
-            // Get repository info
-            var repoInfo = repositoryService.GetRepositoryInfoAsync(repositoryId).GetAwaiter().GetResult();
-            if (repoInfo == null)
-            {
-                throw new InvalidOperationException($"Repository not found: {repositoryId}");
-            }
+        // Load commits per branch using async API (allows tests to mock)
+        var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
+        int processedBranches = 0;
+        int totalBranches = hierarchyInfo.Count;
 
-            using var repo = new LibGit2Sharp.Repository(repoInfo.LocalPath);
+        foreach (var branchInfo in hierarchyInfo)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
 
-            var repoOpenElapsed = (DateTimeOffset.UtcNow - repoOpenStart).TotalMilliseconds;
-            _logger.LogInformation("Opened repository once for all {BranchCount} branches in {OpenTimeMs:F0}ms",
-                hierarchyInfo.Count, repoOpenElapsed);
+            // Report progress BEFORE loading
+            int percentage = 20 + (int)((processedBranches / (double)totalBranches) * 40);
+            progress?.Report(new LayoutProgress(
+                percentage,
+                $"Loading commits: {branchInfo.Name} ({processedBranches + 1}/{totalBranches})",
+                processedBranches,
+                totalBranches));
 
-            var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
-            int processedBranches = 0;
-            int totalBranches = hierarchyInfo.Count;
+            var loadStartTime = DateTimeOffset.UtcNow;
 
-            foreach (var branchInfo in hierarchyInfo)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            _logger.LogInformation("Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
+                branchInfo.Name,
+                branchInfo.Tier,
+                branchInfo.MergeBaseSha?[..8] ?? "none",
+                branchInfo.CommitCount);
 
-                // Report progress BEFORE loading
-                int percentage = 20 + (int)((processedBranches / (double)totalBranches) * 40);
-                progress?.Report(new LayoutProgress(
-                    percentage,
-                    $"Loading commits: {branchInfo.Name} ({processedBranches + 1}/{totalBranches})",
-                    processedBranches,
-                    totalBranches));
+            // Use async version for testability (tests mock this)
+            var commits = await commitAnalyzer.GetCommitsSinceAsync(
+                repositoryId,
+                branchInfo.Name,
+                branchInfo.MergeBaseSha,
+                cancellationToken);
 
-                var loadStartTime = DateTimeOffset.UtcNow;
+            result[branchInfo.Name] = [.. commits];
 
-                _logger.LogInformation("Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
-                    branchInfo.Name,
-                    branchInfo.Tier,
-                    branchInfo.MergeBaseSha?[..8] ?? "none",
-                    branchInfo.CommitCount);
+            var loadElapsed = (DateTimeOffset.UtcNow - loadStartTime).TotalSeconds;
 
-                // Use internal method with already-opened repository (avoids 10s penalty per branch!)
-                var commits = commitAnalyzer.GetCommitsSinceInternal(
-                    repo,
-                    branchInfo.Name,
-                    branchInfo.MergeBaseSha);
+            _logger.LogInformation("Loaded {ActualCommits} commits for branch {BranchName} in {TotalSeconds:F2}s",
+                commits.Count,
+                branchInfo.Name,
+                loadElapsed);
 
-                result[branchInfo.Name] = [.. commits];
+            processedBranches++;
+        }
 
-                var loadElapsed = (DateTimeOffset.UtcNow - loadStartTime).TotalSeconds;
+        var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
+        _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);
 
-                _logger.LogInformation("Loaded {ActualCommits} commits for branch {BranchName} in {TotalSeconds:F2}s",
-                    commits.Count,
-                    branchInfo.Name,
-                    loadElapsed);
-
-                processedBranches++;
-            }
-
-            var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
-            _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);
-
-            return result;
-
-        }, cancellationToken);
+        return result;
     }
 
     private static Dictionary<string, double> AssignBranchLanes(

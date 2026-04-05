@@ -121,7 +121,7 @@ public class CommitAnalyzer(
     /// Use when loading commits for a specific branch (we already know which branch it belongs to).
     /// Skips diff stats calculation for performance (not needed for layout visualization).
     /// </summary>
-    private DomainCommit MapCommitFast(GitCommit gitCommit, Repository repo, string branchName)
+    private static DomainCommit MapCommitFast(GitCommit gitCommit, string branchName)
     {
         // Skip diff stats entirely for layout - saves ~20ms per commit
         // Diff stats are only needed for commit detail views, not visualization
@@ -237,7 +237,7 @@ public class CommitAnalyzer(
 
         // Map to domain commits
         var startMapping = DateTimeOffset.UtcNow;
-        var result = commits.Select(c => MapCommitFast(c, repo, branchName)).ToList() as IReadOnlyList<DomainCommit>;
+        var result = commits.Select(c => MapCommitFast(c, branchName)).ToList() as IReadOnlyList<DomainCommit>;
         var mappingElapsed = (DateTimeOffset.UtcNow - startMapping).TotalSeconds;
 
         logger.LogInformation(

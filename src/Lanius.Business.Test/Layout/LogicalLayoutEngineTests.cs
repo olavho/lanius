@@ -93,10 +93,10 @@ public class LogicalLayoutEngineTests
 
         var branch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "abc123",
-            IsRemote = false
+            IsRemote = true
         };
 
         var commit = new Commit
@@ -114,7 +114,7 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit]);
 
         // Act
@@ -129,7 +129,7 @@ public class LogicalLayoutEngineTests
 
         var node = result.Nodes[0];
         Assert.AreEqual("abc123", node.CommitId);
-        Assert.AreEqual("main", node.BranchName);
+        Assert.AreEqual("origin/main", node.BranchName);
         Assert.AreEqual(4, node.Radius); // Not a merge commit
         Assert.IsFalse(node.IsSignificant);
     }
@@ -143,10 +143,10 @@ public class LogicalLayoutEngineTests
 
         var branch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "def456",
-            IsRemote = false
+            IsRemote = true
         };
 
         var commit1 = new Commit
@@ -174,7 +174,7 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit1, commit2]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -187,7 +187,7 @@ public class LogicalLayoutEngineTests
         Assert.AreEqual("abc123", edge.FromCommitId);
         Assert.AreEqual("def456", edge.ToCommitId);
         Assert.AreEqual(EdgeType.Normal, edge.Type);
-        Assert.AreEqual("main", edge.BranchName);
+        Assert.AreEqual("origin/main", edge.BranchName);
     }
 
     [TestMethod]
@@ -199,10 +199,10 @@ public class LogicalLayoutEngineTests
 
         var branch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "merge123",
-            IsRemote = false
+            IsRemote = true
         };
 
         var mergeCommit = new Commit
@@ -220,7 +220,7 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mergeCommit]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -240,18 +240,18 @@ public class LogicalLayoutEngineTests
 
         var mainBranch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "commit1",
-            IsRemote = false
+            IsRemote = true
         };
 
         var devBranch = new Branch
         {
-            Name = "develop",
-            FullName = "refs/heads/develop",
+            Name = "origin/develop",
+            FullName = "refs/remotes/origin/develop",
             TipSha = "commit2",
-            IsRemote = false
+            IsRemote = true
         };
 
         var commit1 = new Commit
@@ -279,11 +279,11 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit1]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "develop", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/develop", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([commit2]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -357,10 +357,10 @@ public class LogicalLayoutEngineTests
 
         var branch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "commit1",
-            IsRemote = false
+            IsRemote = true
         };
 
         var commit = new Commit
@@ -439,18 +439,18 @@ public class LogicalLayoutEngineTests
 
         var mainBranch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "main1",
-            IsRemote = false
+            IsRemote = true
         };
 
         var featureBranch = new Branch
         {
-            Name = "feature",
-            FullName = "refs/heads/feature",
+            Name = "origin/feature",
+            FullName = "refs/remotes/origin/feature",
             TipSha = "feature1",
-            IsRemote = false
+            IsRemote = true
         };
 
         var mainCommit = new Commit
@@ -478,12 +478,12 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, featureBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainCommit]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([mainCommit, featureCommit]); // Feature includes parent from main
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainCommit, featureCommit]);
 
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -498,7 +498,7 @@ public class LogicalLayoutEngineTests
             e.Type == EdgeType.Branch);
 
         Assert.IsNotNull(branchEdge, "Should have Branch-type edge for split point");
-        Assert.AreEqual("feature", branchEdge.BranchName);
+        Assert.AreEqual("origin/feature", branchEdge.BranchName);
     }
 
     [TestMethod]
@@ -510,18 +510,18 @@ public class LogicalLayoutEngineTests
 
         var mainBranch = new Branch
         {
-            Name = "main",
-            FullName = "refs/heads/main",
+            Name = "origin/main",
+            FullName = "refs/remotes/origin/main",
             TipSha = "merge1",
-            IsRemote = false
+            IsRemote = true
         };
 
         var featureBranch = new Branch
         {
-            Name = "feature",
-            FullName = "refs/heads/feature",
+            Name = "origin/feature",
+            FullName = "refs/remotes/origin/feature",
             TipSha = "feature1",
-            IsRemote = false
+            IsRemote = true
         };
 
         var baseCommit = new Commit
@@ -559,10 +559,10 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, featureBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "main", null, It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync([baseCommit, mergeCommit]);
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([baseCommit, featureCommit]);
 
         // Act
@@ -578,7 +578,7 @@ public class LogicalLayoutEngineTests
             e.Type == EdgeType.Merge);
 
         Assert.IsNotNull(mergeEdge, "Should have Merge-type edge for merge point");
-        Assert.AreEqual("main", mergeEdge.BranchName, "Merge edge should belong to target branch");
+        Assert.AreEqual("origin/main", mergeEdge.BranchName, "Merge edge should belong to target branch");
 
         // Verify merge commit is marked as significant
         var mergeNode = result.Nodes.First(n => n.CommitId == "merge1");
