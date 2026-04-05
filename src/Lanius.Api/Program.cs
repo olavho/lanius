@@ -1,6 +1,7 @@
 using Lanius.Api.Hubs;
 using Lanius.Api.Services;
 using Lanius.Business.Configuration;
+using Lanius.Business.Layout.Services;
 using Lanius.Business.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,6 +27,9 @@ builder.Services.Configure<MonitoringOptions>(
 builder.Services.AddSingleton<IRepositoryService, RepositoryService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
+
+// Register layout engine
+builder.Services.AddScoped<ILayoutEngine, LogicalLayoutEngine>();
 
 // ReplayService is singleton but uses IServiceProvider to create scopes for ICommitAnalyzer
 builder.Services.AddSingleton<IReplayService, ReplayService>();

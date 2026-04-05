@@ -128,41 +128,44 @@ Lanius.Business/
 ### Phase 1: Foundation - Layout Engine Abstractions
 **Goal**: Create layout layer without breaking existing functionality
 
+**Status**: ✅ **COMPLETE**
+
 **Tasks**:
-1. ✅ Create `Models/Layout/` folder with base models
-2. ✅ Create `Services/Layout/ILayoutEngine.cs` interface
+1. ✅ Create `Layout/Models/` folder with base models
+2. ✅ Create `Layout/Services/ILayoutEngine.cs` interface
 3. ✅ Implement `LogicalLayoutEngine.cs` with current algorithm
-4. ✅ Add unit tests for layout engine
+4. ✅ Add unit tests for layout engine (9 tests, all passing)
 5. ✅ Wire up to API without breaking existing frontend
 
-**Files to Create**:
+**Files Created**:
 - `src/Lanius.Business/Layout/Models/LayoutMode.cs`
 - `src/Lanius.Business/Layout/Models/LayoutResult.cs`
 - `src/Lanius.Business/Layout/Models/LayoutNode.cs`
 - `src/Lanius.Business/Layout/Models/LayoutEdge.cs`
 - `src/Lanius.Business/Layout/Models/LayoutOptions.cs`
+- `src/Lanius.Business/Layout/Models/CalendarGranularity.cs`
 - `src/Lanius.Business/Layout/Services/ILayoutEngine.cs`
 - `src/Lanius.Business/Layout/Services/LogicalLayoutEngine.cs`
 - `src/Lanius.Business.Test/Layout/LogicalLayoutEngineTests.cs`
+- `src/Lanius.Api/DTOs/LayoutResponse.cs`
+- `src/Lanius.Api/Controllers/LayoutController.cs`
 
-**API Changes**:
-- Add `GET /api/repository/{id}/layout?mode=logical` endpoint
-- Keep existing endpoints for backward compatibility
-
-**Duration**: 2-3 days  
-**Risk**: Low (additive changes)
+**API Endpoint**:
+- `GET /api/repository/{id}/layout?mode=logical&branchFilter=main,develop`
 
 ---
 
 ### Phase 2: Logical Layout - Complete Branch Lines
 **Goal**: Render all commits with proper branch line visualization
 
+**Status**: ❌ **NOT STARTED**
+
 **Tasks**:
-1. ✅ Extend `LogicalLayoutEngine` to calculate positions for ALL commits
-2. ✅ Calculate branch line paths (y-position per branch)
-3. ✅ Identify split points (branch creation) and merge points
-4. ✅ Generate `LayoutEdge` objects for branch line segments
-5. ✅ Add progress callback for long-running calculations
+1. ❌ Extend `LogicalLayoutEngine` to calculate positions for ALL commits
+2. ❌ Calculate branch line paths (y-position per branch)
+3. ❌ Identify split points (branch creation) and merge points
+4. ❌ Generate `LayoutEdge` objects for branch line segments
+5. ❌ Add progress callback for long-running calculations
 
 **Algorithm**:
 ```
@@ -190,12 +193,14 @@ Lanius.Business/
 ### Phase 3: Canvas Zoom and Pan
 **Goal**: Enable zoom/pan navigation for large graphs
 
+**Status**: ❌ **NOT STARTED**
+
 **Tasks**:
-1. ✅ Add D3 zoom behavior to SVG canvas
-2. ✅ Bind zoom to `g` transform (existing group)
-3. ✅ Add zoom controls (buttons or mouse wheel)
-4. ✅ Add pan controls (drag or scrollbars)
-5. ✅ Preserve zoom/pan state during re-renders
+1. ❌ Add D3 zoom behavior to SVG canvas
+2. ❌ Bind zoom to `g` transform (existing group)
+3. ❌ Add zoom controls (buttons or mouse wheel)
+4. ❌ Add pan controls (drag or scrollbars)
+5. ❌ Preserve zoom/pan state during re-renders
 
 **Implementation**:
 ```javascript
@@ -225,12 +230,14 @@ function resetZoom() {
 ### Phase 4: Calendar Layout Engine
 **Goal**: Group commits by calendar periods with zoom-aware granularity
 
+**Status**: ❌ **NOT STARTED**
+
 **Tasks**:
-1. ✅ Create `CalendarLayoutEngine.cs`
-2. ✅ Implement grouping by day/week/month/year
-3. ✅ Calculate aggregate stats per group (commit count, lines changed)
-4. ✅ Position groups as bars or blocks
-5. ✅ Add zoom threshold detection for granularity switching
+1. ❌ Create `CalendarLayoutEngine.cs`
+2. ❌ Implement grouping by day/week/month/year
+3. ❌ Calculate aggregate stats per group (commit count, lines changed)
+4. ❌ Position groups as bars or blocks
+5. ❌ Add zoom threshold detection for granularity switching
 
 **Algorithm**:
 ```
@@ -284,12 +291,14 @@ function onZoomChange(zoomLevel) {
 ### Phase 5: Progress Indicators
 **Goal**: Show progress during layout calculations
 
+**Status**: ✅ **INTERFACE COMPLETE** (Implementation in Phase 1)
+
 **Tasks**:
 1. ✅ Add `IProgress<LayoutProgress>` to layout engine methods
-2. ✅ Report progress percentage and current operation
-3. ✅ Add SignalR hub method for layout progress updates
-4. ✅ Display progress bar in UI
-5. ✅ Show operation details ("Analyzing 12,000 commits...")
+2. ✅ Report progress percentage and current operation (in LogicalLayoutEngine)
+3. ❌ Add SignalR hub method for layout progress updates
+4. ❌ Display progress bar in UI
+5. ❌ Show operation details ("Analyzing 12,000 commits...")
 
 **Backend**:
 ```csharp
@@ -337,13 +346,15 @@ connection.on('LayoutProgress', (sessionId, progress) => {
 ### Phase 6: Reorganize Business Layer
 **Goal**: Refactor to domain-driven structure with co-located models
 
+**Status**: ⚠️ **PARTIALLY COMPLETE** (Layout domain created, others pending)
+
 **Migration Strategy**:
-1. ✅ Create new folder structure (Analysis/, Layout/, Replay/)
-2. ✅ Move files gradually (one domain at a time)
-3. ✅ Update namespaces to match new structure
-4. ✅ Update all `using` statements across solution
-5. ✅ Run tests after each domain migration
-6. ✅ Update API/DTOs that reference moved models
+1. ✅ Create new folder structure (Layout/ created, others pending)
+2. ❌ Move files gradually (one domain at a time)
+3. ❌ Update namespaces to match new structure
+4. ❌ Update all `using` statements across solution
+5. ❌ Run tests after each domain migration
+6. ❌ Update API/DTOs that reference moved models
 
 **Migration Order**:
 1. **Layout** (new code, easier to organize from start)
