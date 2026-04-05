@@ -13,7 +13,9 @@ public class CommitAnalyzerTests
     private Mock<IRepositoryService> _mockRepoService = null!;
     private CommitAnalyzer _analyzer = null!;
     private string _testRepoId = null!;
-    private readonly List<string> _tempPaths = new();
+    private readonly List<string> _tempPaths = [];
+
+    public TestContext TestContext { get; set; } = null!;
 
     [TestInitialize]
     public void Setup()
@@ -60,7 +62,7 @@ public class CommitAnalyzerTests
 
         // Act & Assert
         var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => _analyzer.GetCommitsAsync(_testRepoId));
+            () => _analyzer.GetCommitsAsync(_testRepoId, null, TestContext.CancellationToken));
 
         Assert.Contains("not found", exception.Message);
     }
@@ -87,7 +89,7 @@ public class CommitAnalyzerTests
         SetupMockRepository(tempPath);
 
         // Act
-        IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsAsync(_testRepoId);
+        IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsAsync(_testRepoId, cancellationToken: TestContext.CancellationToken);
 
         // Assert
         Assert.IsNotNull(commits);
@@ -105,7 +107,7 @@ public class CommitAnalyzerTests
         SetupMockRepository(tempPath);
 
         // Act
-        IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsChronologicallyAsync(_testRepoId);
+        IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsChronologicallyAsync(_testRepoId, cancellationToken: TestContext.CancellationToken);
 
         // Assert
         Assert.IsNotNull(commits);
@@ -126,7 +128,7 @@ public class CommitAnalyzerTests
         var tempPath = CreateTemporaryRepository();
         SetupMockRepository(tempPath);
 
-        IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsAsync(_testRepoId);
+        IReadOnlyList<DomainCommit> commits = await _analyzer.GetCommitsAsync(_testRepoId, cancellationToken: TestContext.CancellationToken);
         var firstCommitSha = commits[0].Sha;
 
         // Act

@@ -6,8 +6,11 @@ namespace Lanius.Business.Test.Services;
 /// Minimal tests to understand LibGit2Sharp authentication patterns.
 /// </summary>
 [TestClass]
+[Ignore("Run manually for experimentation")]
 public class LibGit2SharpAuthTests
 {
+
+    public TestContext TestContext { get; set; }
 
     [TestCleanup]
     public void Cleanup()
@@ -43,7 +46,7 @@ public class LibGit2SharpAuthTests
         }
     }
 
-    private void CleanupDirectory(string path)
+    private static void CleanupDirectory(string path)
     {
         if (Directory.Exists(path))
         {

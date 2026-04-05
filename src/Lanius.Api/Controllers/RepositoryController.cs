@@ -6,18 +6,10 @@ namespace Lanius.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class RepositoryController : ControllerBase
+public class RepositoryController(
+    IRepositoryService repositoryService,
+    ILogger<RepositoryController> logger) : ControllerBase
 {
-    private readonly IRepositoryService _repositoryService;
-    private readonly ILogger<RepositoryController> _logger;
-
-    public RepositoryController(
-        IRepositoryService repositoryService,
-        ILogger<RepositoryController> logger)
-    {
-        _repositoryService = repositoryService;
-        _logger = logger;
-    }
 
     /// <summary>
     /// Clone a Git repository.
@@ -36,13 +28,13 @@ public class RepositoryController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Cloning repository from URL: {Url}", request.Url);
+            logger.LogInformation("Cloning repository from URL: {Url}", request.Url);
 
             // Check if repository already exists before cloning
             var repoId = GenerateRepositoryId(request.Url);
-            var alreadyExisted = _repositoryService.RepositoryExists(repoId);
+            var alreadyExisted = repositoryService.RepositoryExists(repoId);
 
-            var info = await _repositoryService.CloneRepositoryAsync(request.Url, cancellationToken);
+            var info = await repositoryService.CloneRepositoryAsync(request.Url, cancellationToken);
 
             var response = new RepositoryResponse
             {
@@ -59,7 +51,7 @@ public class RepositoryController : ControllerBase
             // Return 200 OK if repository already existed, 201 Created if newly cloned
             if (alreadyExisted)
             {
-                _logger.LogInformation("Repository already existed, fetched updates: {Id}", info.Id);
+                logger.LogInformation("Repository already existed, fetched updates: {Id}", info.Id);
                 return Ok(response);
             }
 
@@ -67,7 +59,7 @@ public class RepositoryController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Failed to clone repository: {Url}", request.Url);
+            logger.LogWarning(ex, "Failed to clone repository: {Url}", request.Url);
             return BadRequest(new ErrorResponse
             {
                 Error = "CloneFailed",
@@ -77,7 +69,7 @@ public class RepositoryController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error cloning repository: {Url}", request.Url);
+            logger.LogError(ex, "Unexpected error cloning repository: {Url}", request.Url);
             return StatusCode(500, new ErrorResponse
             {
                 Error = "InternalError",
@@ -98,7 +90,7 @@ public class RepositoryController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RepositoryResponse>> GetRepository(string id)
     {
-        var info = await _repositoryService.GetRepositoryInfoAsync(id);
+        var info = await repositoryService.GetRepositoryInfoAsync(id);
 
         if (info == null)
         {
@@ -138,15 +130,15 @@ public class RepositoryController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Fetching updates for repository: {Id}", id);
+            logger.LogInformation("Fetching updates for repository: {Id}", id);
 
-            var hasUpdates = await _repositoryService.FetchUpdatesAsync(id, cancellationToken);
+            var hasUpdates = await repositoryService.FetchUpdatesAsync(id, cancellationToken);
 
             return Ok(hasUpdates);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", id);
+            logger.LogWarning(ex, "Repository not found: {Id}", id);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",
@@ -154,6 +146,33 @@ public class RepositoryController : ControllerBase
                 Timestamp = DateTimeOffset.UtcNow
             });
         }
+    }
+
+    /// <summary>
+    /// List all locally cloned repositories.
+    /// </summary>
+    /// <returns>List of repository information.</returns>
+    [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<RepositoryResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<RepositoryResponse>>> ListRepositories()
+    {
+        logger.LogInformation("Listing all repositories");
+
+        var repositories = await repositoryService.ListRepositoriesAsync();
+
+        var response = repositories.Select(info => new RepositoryResponse
+        {
+            Id = info.Id,
+            Url = info.Url,
+            DefaultBranch = info.DefaultBranch,
+            ClonedAt = info.ClonedAt,
+            LastFetchedAt = info.LastFetchedAt,
+            TotalCommits = info.TotalCommits,
+            TotalBranches = info.TotalBranches,
+            AlreadyExisted = false
+        });
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -165,9 +184,9 @@ public class RepositoryController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeleteRepository(string id)
     {
-        _logger.LogInformation("Deleting repository: {Id}", id);
+        logger.LogInformation("Deleting repository: {Id}", id);
 
-        await _repositoryService.DeleteRepositoryAsync(id);
+        await repositoryService.DeleteRepositoryAsync(id);
 
         return NoContent();
     }

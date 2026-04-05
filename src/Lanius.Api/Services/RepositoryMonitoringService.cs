@@ -10,27 +10,16 @@ namespace Lanius.Api.Services;
 /// <summary>
 /// Background service that monitors repositories for new commits and broadcasts updates via SignalR.
 /// </summary>
-public class RepositoryMonitoringService : BackgroundService
+public class RepositoryMonitoringService(
+    IServiceProvider serviceProvider,
+    IHubContext<RepositoryHub> hubContext,
+    IOptions<MonitoringOptions> options,
+    ILogger<RepositoryMonitoringService> logger) : BackgroundService
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IHubContext<RepositoryHub> _hubContext;
-    private readonly MonitoringOptions _options;
-    private readonly ILogger<RepositoryMonitoringService> _logger;
-    private readonly Dictionary<string, string> _lastKnownCommits = new();
-    private readonly HashSet<string> _monitoredRepositories = new();
-    private readonly object _lock = new();
-
-    public RepositoryMonitoringService(
-        IServiceProvider serviceProvider,
-        IHubContext<RepositoryHub> hubContext,
-        IOptions<MonitoringOptions> options,
-        ILogger<RepositoryMonitoringService> logger)
-    {
-        _serviceProvider = serviceProvider;
-        _hubContext = hubContext;
-        _options = options.Value;
-        _logger = logger;
-    }
+    private readonly MonitoringOptions _options = options.Value;
+    private readonly Dictionary<string, string> _lastKnownCommits = [];
+    private readonly HashSet<string> _monitoredRepositories = [];
+    private readonly Lock _lock = new();
 
     /// <summary>
     /// Add a repository to monitor.
@@ -41,7 +30,7 @@ public class RepositoryMonitoringService : BackgroundService
         {
             if (_monitoredRepositories.Add(repositoryId))
             {
-                _logger.LogInformation("Started monitoring repository: {RepositoryId}", repositoryId);
+                logger.LogInformation("Started monitoring repository: {RepositoryId}", repositoryId);
             }
         }
     }
@@ -56,7 +45,7 @@ public class RepositoryMonitoringService : BackgroundService
             if (_monitoredRepositories.Remove(repositoryId))
             {
                 _lastKnownCommits.Remove(repositoryId);
-                _logger.LogInformation("Stopped monitoring repository: {RepositoryId}", repositoryId);
+                logger.LogInformation("Stopped monitoring repository: {RepositoryId}", repositoryId);
             }
         }
     }
@@ -65,11 +54,11 @@ public class RepositoryMonitoringService : BackgroundService
     {
         if (!_options.Enabled)
         {
-            _logger.LogInformation("Repository monitoring is disabled");
+            logger.LogInformation("Repository monitoring is disabled");
             return;
         }
 
-        _logger.LogInformation("Repository monitoring service started with {Interval} polling interval", 
+        logger.LogInformation("Repository monitoring service started with {Interval} polling interval",
             _options.PollingInterval);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -80,7 +69,7 @@ public class RepositoryMonitoringService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error checking for repository updates");
+                logger.LogError(ex, "Error checking for repository updates");
             }
 
             await Task.Delay(_options.PollingInterval, stoppingToken);
@@ -93,7 +82,7 @@ public class RepositoryMonitoringService : BackgroundService
 
         lock (_lock)
         {
-            repositoriesToCheck = _monitoredRepositories.ToArray();
+            repositoriesToCheck = [.. _monitoredRepositories];
         }
 
         if (repositoriesToCheck.Length == 0)
@@ -101,7 +90,7 @@ public class RepositoryMonitoringService : BackgroundService
             return;
         }
 
-        _logger.LogDebug("Checking {Count} repositories for updates", repositoriesToCheck.Length);
+        logger.LogDebug("Checking {Count} repositories for updates", repositoriesToCheck.Length);
 
         foreach (var repositoryId in repositoriesToCheck)
         {
@@ -116,14 +105,14 @@ public class RepositoryMonitoringService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error checking repository {RepositoryId} for updates", repositoryId);
+                logger.LogWarning(ex, "Error checking repository {RepositoryId} for updates", repositoryId);
             }
         }
     }
 
     private async Task CheckRepositoryForUpdates(string repositoryId, CancellationToken cancellationToken)
     {
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = serviceProvider.CreateScope();
         var repositoryService = scope.ServiceProvider.GetRequiredService<IRepositoryService>();
         var commitAnalyzer = scope.ServiceProvider.GetRequiredService<ICommitAnalyzer>();
 
@@ -135,7 +124,7 @@ public class RepositoryMonitoringService : BackgroundService
             return;
         }
 
-        _logger.LogInformation("Repository {RepositoryId} has new commits", repositoryId);
+        logger.LogInformation("Repository {RepositoryId} has new commits", repositoryId);
 
         // Get latest commits
         var commits = await commitAnalyzer.GetCommitsAsync(repositoryId, null, cancellationToken);
@@ -158,7 +147,7 @@ public class RepositoryMonitoringService : BackgroundService
         if (previousCommitSha == null)
         {
             // First time checking this repository
-            _logger.LogDebug("Initialized tracking for repository {RepositoryId}", repositoryId);
+            logger.LogDebug("Initialized tracking for repository {RepositoryId}", repositoryId);
             return;
         }
 
@@ -179,7 +168,7 @@ public class RepositoryMonitoringService : BackgroundService
                 Timestamp = c.Timestamp,
                 Message = c.Message,
                 ShortMessage = c.ShortMessage,
-                ParentShas = c.ParentShas.ToList(),
+                ParentShas = [.. c.ParentShas],
                 IsMerge = c.IsMerge,
                 Stats = c.Stats != null ? new DiffStatsResponse
                 {
@@ -190,24 +179,24 @@ public class RepositoryMonitoringService : BackgroundService
                     FilesChanged = c.Stats.FilesChanged,
                     ColorIndicator = c.Stats.ColorIndicator
                 } : null,
-                Branches = c.Branches.ToList()
+                Branches = [.. c.Branches]
             })
             .ToList();
 
         if (newCommits.Count > 0)
         {
-            _logger.LogInformation("Broadcasting {Count} new commits for repository {RepositoryId}", 
+            logger.LogInformation("Broadcasting {Count} new commits for repository {RepositoryId}",
                 newCommits.Count, repositoryId);
 
             // Broadcast to all connected clients subscribed to this repository
-            await _hubContext.Clients.Group($"repo:{repositoryId}")
+            await hubContext.Clients.Group($"repo:{repositoryId}")
                 .SendAsync("ReceiveNewCommits", newCommits, cancellationToken);
 
             // Also broadcast repository update
             var repoInfo = await repositoryService.GetRepositoryInfoAsync(repositoryId);
             if (repoInfo != null)
             {
-                await _hubContext.Clients.Group($"repo:{repositoryId}")
+                await hubContext.Clients.Group($"repo:{repositoryId}")
                     .SendAsync("RepositoryUpdated", new RepositoryResponse
                     {
                         Id = repoInfo.Id,

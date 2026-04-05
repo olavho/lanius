@@ -8,16 +8,10 @@ namespace Lanius.Business.Services;
 /// <summary>
 /// Service for replaying commit history using Rx.NET observables.
 /// </summary>
-public class ReplayService : IReplayService
+public class ReplayService(IServiceProvider serviceProvider) : IReplayService
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly Dictionary<string, ReplaySessionContext> _sessions = new();
-    private readonly object _lock = new();
-
-    public ReplayService(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
+    private readonly Dictionary<string, ReplaySessionContext> _sessions = [];
+    private readonly Lock _lock = new();
 
     public async Task<ReplaySession> StartReplayAsync(
         string repositoryId,
@@ -25,7 +19,7 @@ public class ReplayService : IReplayService
         CancellationToken cancellationToken = default)
     {
         // Create a scope to get ICommitAnalyzer
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = serviceProvider.CreateScope();
         var commitAnalyzer = scope.ServiceProvider.GetRequiredService<ICommitAnalyzer>();
 
         // Get commits chronologically
@@ -38,9 +32,7 @@ public class ReplayService : IReplayService
         // Filter by branch if specified
         if (!string.IsNullOrWhiteSpace(options.BranchFilter))
         {
-            commits = commits
-                .Where(c => c.Branches.Contains(options.BranchFilter, StringComparer.OrdinalIgnoreCase))
-                .ToList();
+            commits = [.. commits.Where(c => c.Branches.Contains(options.BranchFilter, StringComparer.OrdinalIgnoreCase))];
         }
 
         var sessionId = Guid.NewGuid().ToString("N");
@@ -113,8 +105,8 @@ public class ReplayService : IReplayService
             {
                 context.CancellationTokenSource.Cancel();
                 context.Subject.OnCompleted();
-                context.Session = context.Session with 
-                { 
+                context.Session = context.Session with
+                {
                     State = ReplayState.Cancelled,
                     CompletedAt = DateTimeOffset.UtcNow
                 };
@@ -232,7 +224,7 @@ public class ReplayService : IReplayService
         catch (Exception ex)
         {
             context.Subject.OnError(ex);
-            
+
             lock (_lock)
             {
                 context.Session = context.Session with

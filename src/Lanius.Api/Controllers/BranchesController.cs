@@ -6,18 +6,10 @@ namespace Lanius.Api.Controllers;
 
 [ApiController]
 [Route("api/repositories/{repositoryId}/[controller]")]
-public class BranchesController : ControllerBase
+public class BranchesController(
+    IBranchAnalyzer branchAnalyzer,
+    ILogger<BranchesController> logger) : ControllerBase
 {
-    private readonly IBranchAnalyzer _branchAnalyzer;
-    private readonly ILogger<BranchesController> _logger;
-
-    public BranchesController(
-        IBranchAnalyzer branchAnalyzer,
-        ILogger<BranchesController> logger)
-    {
-        _branchAnalyzer = branchAnalyzer;
-        _logger = logger;
-    }
 
     /// <summary>
     /// Get all branches from a repository.
@@ -38,18 +30,18 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Getting branches for repository: {Id}", repositoryId);
+            logger.LogInformation("Getting branches for repository: {Id}", repositoryId);
 
             IReadOnlyList<Business.Models.Branch> branches;
 
             if (patterns != null && patterns.Length > 0)
             {
-                branches = await _branchAnalyzer.GetBranchesByPatternAsync(
+                branches = await branchAnalyzer.GetBranchesByPatternAsync(
                     repositoryId, patterns, cancellationToken);
             }
             else
             {
-                branches = await _branchAnalyzer.GetBranchesAsync(
+                branches = await branchAnalyzer.GetBranchesAsync(
                     repositoryId, includeRemote, cancellationToken);
             }
 
@@ -70,7 +62,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",
@@ -93,7 +85,7 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            var branch = await _branchAnalyzer.GetBranchAsync(repositoryId, branchName);
+            var branch = await branchAnalyzer.GetBranchAsync(repositoryId, branchName);
 
             if (branch == null)
             {
@@ -120,7 +112,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",
@@ -147,10 +139,10 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Calculating divergence between {Base} and {Compare}", 
+            logger.LogInformation("Calculating divergence between {Base} and {Compare}",
                 baseBranch, compareBranch);
 
-            var (ahead, behind) = await _branchAnalyzer.GetBranchDivergenceAsync(
+            var (ahead, behind) = await branchAnalyzer.GetBranchDivergenceAsync(
                 repositoryId, baseBranch, compareBranch);
 
             return Ok(new
@@ -163,7 +155,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Branch operation failed");
+            logger.LogWarning(ex, "Branch operation failed");
             return NotFound(new ErrorResponse
             {
                 Error = "BranchNotFound",
@@ -190,10 +182,10 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Finding common ancestor between {Branch1} and {Branch2}", 
+            logger.LogInformation("Finding common ancestor between {Branch1} and {Branch2}",
                 branch1, branch2);
 
-            var ancestorSha = await _branchAnalyzer.FindCommonAncestorAsync(
+            var ancestorSha = await branchAnalyzer.FindCommonAncestorAsync(
                 repositoryId, branch1, branch2);
 
             if (ancestorSha == null)
@@ -215,7 +207,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Branch operation failed");
+            logger.LogWarning(ex, "Branch operation failed");
             return NotFound(new ErrorResponse
             {
                 Error = "BranchNotFound",
@@ -244,34 +236,34 @@ public class BranchesController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Getting branch overview for repository: {Id}, patterns: {Patterns}, includeRemote: {IncludeRemote}", 
+            logger.LogInformation("Getting branch overview for repository: {Id}, patterns: {Patterns}, includeRemote: {IncludeRemote}",
                 repositoryId, patterns != null ? string.Join(", ", patterns) : "none", includeRemote);
 
             // Get filtered branches
             IReadOnlyList<Business.Models.Branch> branches;
             if (patterns != null && patterns.Length > 0)
             {
-                _logger.LogInformation("Using pattern-based filtering with {Count} patterns", patterns.Length);
-                branches = await _branchAnalyzer.GetBranchesByPatternAsync(
+                logger.LogInformation("Using pattern-based filtering with {Count} patterns", patterns.Length);
+                branches = await branchAnalyzer.GetBranchesByPatternAsync(
                     repositoryId, patterns, cancellationToken);
             }
             else
             {
-                _logger.LogInformation("Loading all branches (includeRemote: {IncludeRemote})", includeRemote);
-                branches = await _branchAnalyzer.GetBranchesAsync(
+                logger.LogInformation("Loading all branches (includeRemote: {IncludeRemote})", includeRemote);
+                branches = await branchAnalyzer.GetBranchesAsync(
                     repositoryId, includeRemote, cancellationToken);
             }
 
-            _logger.LogInformation("Found {Count} branches: {Names}", 
+            logger.LogInformation("Found {Count} branches: {Names}",
                 branches.Count, string.Join(", ", branches.Select(b => b.Name).Take(10)));
 
             if (branches.Count == 0)
             {
                 return Ok(new BranchOverviewResponse
                 {
-                    Branches = new List<BranchSummary>(),
-                    SignificantCommits = new List<SignificantCommit>(),
-                    Relationships = new List<CommitRelationship>()
+                    Branches = [],
+                    SignificantCommits = [],
+                    Relationships = []
                 });
             }
 
@@ -279,7 +271,7 @@ public class BranchesController : ControllerBase
             var limitedBranches = branches.Take(20).ToList();
             if (branches.Count > 20)
             {
-                _logger.LogInformation("Limiting from {Total} to {Limited} branches for performance", 
+                logger.LogInformation("Limiting from {Total} to {Limited} branches for performance",
                     branches.Count, limitedBranches.Count);
             }
 
@@ -287,10 +279,10 @@ public class BranchesController : ControllerBase
             var branchNames = limitedBranches.Select(b => b.Name).ToList();
 
             // Get the simplified overview
-            var overview = await _branchAnalyzer.GetBranchOverviewAsync(
+            var overview = await branchAnalyzer.GetBranchOverviewAsync(
                 repositoryId, branchNames, cancellationToken);
 
-            _logger.LogInformation("Overview generated: {CommitCount} significant commits, {RelationshipCount} relationships",
+            logger.LogInformation("Overview generated: {CommitCount} significant commits, {RelationshipCount} relationships",
                 overview.SignificantCommits.Count, overview.Relationships.Count);
 
             // Map to DTOs
@@ -343,7 +335,7 @@ public class BranchesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",

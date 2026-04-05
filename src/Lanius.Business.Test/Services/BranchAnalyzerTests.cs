@@ -12,7 +12,9 @@ public class BranchAnalyzerTests
     private Mock<IRepositoryService> _mockRepoService = null!;
     private BranchAnalyzer _analyzer = null!;
     private string _testRepoId = null!;
-    private readonly List<string> _tempPaths = new();
+    private readonly List<string> _tempPaths = [];
+
+    public TestContext TestContext { get; set; }
 
     [TestInitialize]
     public void Setup()
@@ -59,7 +61,7 @@ public class BranchAnalyzerTests
 
         // Act & Assert
         var exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => _analyzer.GetBranchesAsync(_testRepoId));
+            () => _analyzer.GetBranchesAsync(_testRepoId, true, TestContext.CancellationToken));
 
         Assert.Contains("not found", exception.Message);
     }
@@ -72,7 +74,7 @@ public class BranchAnalyzerTests
         SetupMockRepository(tempPath);
 
         // Act
-        IReadOnlyList<DomainBranch> branches = await _analyzer.GetBranchesAsync(_testRepoId);
+        IReadOnlyList<DomainBranch> branches = await _analyzer.GetBranchesAsync(_testRepoId, cancellationToken: TestContext.CancellationToken);
 
         // Assert
         Assert.IsNotNull(branches);
@@ -93,7 +95,7 @@ public class BranchAnalyzerTests
         var defaultBranch = repo.Head.FriendlyName;
 
         // Act
-        IReadOnlyList<DomainBranch> branches = await _analyzer.GetBranchesByPatternAsync(_testRepoId, new[] { "main", "master" });
+        IReadOnlyList<DomainBranch> branches = await _analyzer.GetBranchesByPatternAsync(_testRepoId, ["main", "master"], TestContext.CancellationToken);
 
         // Assert
         Assert.IsNotNull(branches);
@@ -109,7 +111,7 @@ public class BranchAnalyzerTests
         SetupMockRepository(tempPath);
 
         // Act
-        IReadOnlyList<DomainBranch> branches = await _analyzer.GetBranchesByPatternAsync(_testRepoId, new[] { "feature/*" });
+        IReadOnlyList<DomainBranch> branches = await _analyzer.GetBranchesByPatternAsync(_testRepoId, ["feature/*"], TestContext.CancellationToken);
 
         // Assert
         Assert.IsNotNull(branches);

@@ -7,18 +7,10 @@ namespace Lanius.Api.Hubs;
 /// <summary>
 /// SignalR hub for real-time repository updates and replay streaming.
 /// </summary>
-public class RepositoryHub : Hub
+public class RepositoryHub(
+    ILogger<RepositoryHub> logger,
+    ReplaySignalRBridge replayBridge) : Hub
 {
-    private readonly ILogger<RepositoryHub> _logger;
-    private readonly ReplaySignalRBridge _replayBridge;
-
-    public RepositoryHub(
-        ILogger<RepositoryHub> logger,
-        ReplaySignalRBridge replayBridge)
-    {
-        _logger = logger;
-        _replayBridge = replayBridge;
-    }
 
     /// <summary>
     /// Client subscribes to updates for a specific repository.
@@ -27,7 +19,7 @@ public class RepositoryHub : Hub
     public async Task SubscribeToRepository(string repositoryId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, $"repo:{repositoryId}");
-        _logger.LogInformation("Client {ConnectionId} subscribed to repository {RepositoryId}", 
+        logger.LogInformation("Client {ConnectionId} subscribed to repository {RepositoryId}",
             Context.ConnectionId, repositoryId);
     }
 
@@ -38,7 +30,7 @@ public class RepositoryHub : Hub
     public async Task UnsubscribeFromRepository(string repositoryId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"repo:{repositoryId}");
-        _logger.LogInformation("Client {ConnectionId} unsubscribed from repository {RepositoryId}", 
+        logger.LogInformation("Client {ConnectionId} unsubscribed from repository {RepositoryId}",
             Context.ConnectionId, repositoryId);
     }
 
@@ -49,11 +41,11 @@ public class RepositoryHub : Hub
     public async Task SubscribeToReplay(string sessionId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, $"replay:{sessionId}");
-        _logger.LogInformation("Client {ConnectionId} subscribed to replay session {SessionId}",
+        logger.LogInformation("Client {ConnectionId} subscribed to replay session {SessionId}",
             Context.ConnectionId, sessionId);
 
         // Start streaming if not already started
-        _replayBridge.StartStreaming(sessionId);
+        replayBridge.StartStreaming(sessionId);
     }
 
     /// <summary>
@@ -63,19 +55,19 @@ public class RepositoryHub : Hub
     public async Task UnsubscribeFromReplay(string sessionId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"replay:{sessionId}");
-        _logger.LogInformation("Client {ConnectionId} unsubscribed from replay session {SessionId}",
+        logger.LogInformation("Client {ConnectionId} unsubscribed from replay session {SessionId}",
             Context.ConnectionId, sessionId);
     }
 
     public override async Task OnConnectedAsync()
     {
-        _logger.LogInformation("Client connected: {ConnectionId}", Context.ConnectionId);
+        logger.LogInformation("Client connected: {ConnectionId}", Context.ConnectionId);
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        _logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
+        logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 

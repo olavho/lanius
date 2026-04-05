@@ -23,20 +23,22 @@ let state = {
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventHandlers();
     initializeSignalR();
+    loadExistingRepositories();
 });
 
 // Event Handlers
 function initializeEventHandlers() {
     // Repository
     document.getElementById('clone-btn').addEventListener('click', cloneRepository);
+    document.getElementById('repo-select').addEventListener('change', onRepositorySelected);
     document.getElementById('filter-btn').addEventListener('click', applyBranchFilter);
-    
+
     // Replay
     document.getElementById('replay-start').addEventListener('click', startReplay);
     document.getElementById('replay-pause').addEventListener('click', pauseReplay);
     document.getElementById('replay-resume').addEventListener('click', resumeReplay);
     document.getElementById('replay-stop').addEventListener('click', stopReplay);
-    
+
     // Speed slider
     const speedSlider = document.getElementById('speed-slider');
     speedSlider.addEventListener('input', (e) => {
@@ -44,11 +46,11 @@ function initializeEventHandlers() {
         state.replaySpeed = speed;
         document.getElementById('speed-display').textContent = `${speed.toFixed(1)}x`;
     });
-    
+
     // Monitoring
     document.getElementById('monitor-start').addEventListener('click', startMonitoring);
     document.getElementById('monitor-stop').addEventListener('click', stopMonitoring);
-    
+
     // Commit detail close
     document.querySelector('.detail-close').addEventListener('click', hideCommitDetail);
 }
@@ -87,7 +89,7 @@ async function cloneRepository() {
     }
 
     updateStatus('repo-status', 'Cloning repository...');
-    
+
     try {
         const response = await fetch(`${API_URL}/api/repository/clone`, {
             method: 'POST',
@@ -101,26 +103,112 @@ async function cloneRepository() {
         }
 
         const repo = await response.json();
-        
+
         // Clear previous repository state
         if (state.repositoryId && state.repositoryId !== repo.id) {
             clearRepositoryState();
         }
-        
+
         state.repositoryId = repo.id;
-        
-        const statusMessage = repo.alreadyExisted 
+
+        const statusMessage = repo.alreadyExisted
             ? `Repository updated: ${repo.defaultBranch} (${repo.totalCommits} commits)`
             : `Cloned: ${repo.defaultBranch} (${repo.totalCommits} commits)`;
         updateStatus('repo-status', statusMessage);
         updateStats(repo);
-        
+
         // Load commits and branches
         await loadRepository();
-        
+
+        // Refresh the repository dropdown to include the newly cloned repo
+        if (!repo.alreadyExisted) {
+            await loadExistingRepositories();
+            // Select the newly cloned repository in the dropdown
+            document.getElementById('repo-select').value = repo.id;
+        }
+
     } catch (err) {
         console.error('Clone error:', err);
         updateStatus('repo-status', `Error: ${err.message}`, true);
+    }
+}
+
+// Load existing repositories into dropdown
+async function loadExistingRepositories() {
+    try {
+        const response = await fetch(`${API_URL}/api/repository`);
+
+        if (!response.ok) {
+            console.warn('Failed to load existing repositories');
+            return;
+        }
+
+        const repositories = await response.json();
+        const select = document.getElementById('repo-select');
+
+        // Clear existing options except the first one
+        select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+
+        // Add repositories to dropdown
+        repositories.forEach(repo => {
+            const option = document.createElement('option');
+            option.value = repo.id;
+            option.textContent = `${repo.url} (${repo.totalCommits} commits)`;
+            option.dataset.url = repo.url;
+            select.appendChild(option);
+        });
+
+        console.log(`Loaded ${repositories.length} existing repositories`);
+    } catch (err) {
+        console.error('Error loading existing repositories:', err);
+    }
+}
+
+// Handle repository selection from dropdown
+async function onRepositorySelected(event) {
+    const select = event.target;
+    const selectedId = select.value;
+
+    if (!selectedId) {
+        // Clear the URL input when "Select or enter new URL" is chosen
+        document.getElementById('repo-url').value = '';
+        return;
+    }
+
+    const selectedOption = select.options[select.selectedIndex];
+    const url = selectedOption.dataset.url;
+
+    // Update the URL input field
+    document.getElementById('repo-url').value = url;
+
+    // Clear previous repository state if different
+    if (state.repositoryId && state.repositoryId !== selectedId) {
+        clearRepositoryState();
+    }
+
+    // Set the repository ID and load it
+    state.repositoryId = selectedId;
+    updateStatus('repo-status', `Loading repository: ${url}...`);
+
+    try {
+        // Get repository info
+        const response = await fetch(`${API_URL}/api/repository/${selectedId}`);
+
+        if (!response.ok) {
+            throw new Error('Repository not found');
+        }
+
+        const repo = await response.json();
+        updateStats(repo);
+        updateStatus('repo-status', `Loaded: ${repo.defaultBranch} (${repo.totalCommits} commits)`);
+
+        // Load commits and branches
+        await loadRepository();
+
+    } catch (err) {
+        console.error('Load error:', err);
+        updateStatus('repo-status', `Error: ${err.message}`, true);
+        state.repositoryId = null;
     }
 }
 
@@ -130,10 +218,10 @@ function clearRepositoryState() {
     state.branches = [];
     state.relationships = [];
     state.replaySessionId = null;
-    
+
     // Clear visualization
     clearVisualization();
-    
+
     // Reset stats
     state.stats = {
         totalCommits: 0,
@@ -141,16 +229,16 @@ function clearRepositoryState() {
         linesAdded: 0,
         linesRemoved: 0
     };
-    
+
     document.getElementById('stat-commits').textContent = '0';
     document.getElementById('stat-branches').textContent = '0';
     document.getElementById('stat-additions').textContent = '+0';
     document.getElementById('stat-deletions').textContent = '-0';
-    
+
     // Reset UI elements
     updateCanvasInfo('No repository loaded');
     setReplayButtonState(false);
-    
+
     console.log('Repository state cleared');
 }
 
@@ -159,15 +247,15 @@ async function loadRepository() {
 
     try {
         updateStatus('repo-status', 'Loading branch overview...');
-        
+
         // Get branch filter patterns - handle empty/whitespace properly
         const branchFilterInput = document.getElementById('branch-pattern').value;
         const branchFilter = branchFilterInput ? branchFilterInput.trim() : '';
         const hasFilter = branchFilter.length > 0;
-        
+
         console.log('Branch filter input:', `"${branchFilterInput}"`);
         console.log('Has filter:', hasFilter);
-        
+
         // Use the new overview endpoint that returns only significant commits
         // Note: includeRemote defaults to true on the server
         let overviewUrl = `${API_URL}/api/repositories/${state.repositoryId}/branches/overview`;
@@ -179,7 +267,7 @@ async function loadRepository() {
                 overviewUrl += `?${queryParams}`;
             }
         }
-        
+
         console.log('Fetching branch overview from:', overviewUrl);
         const overviewResponse = await fetch(overviewUrl);
         if (!overviewResponse.ok) {
@@ -187,7 +275,7 @@ async function loadRepository() {
             console.error('API Error Response:', errorText);
             throw new Error(`Failed to load branch overview: ${overviewResponse.statusText}`);
         }
-        
+
         const overview = await overviewResponse.json();
         console.log('=== BRANCH OVERVIEW LOADED ===');
         console.log('Full response keys:', Object.keys(overview));
@@ -229,7 +317,7 @@ async function loadRepository() {
             clearVisualization();
             return;
         }
-        
+
         if (state.branches.length === 0) {
             updateStatus('repo-status', 'No branches found matching filter', true);
             updateCanvasInfo('No branches to display');
@@ -240,16 +328,16 @@ async function loadRepository() {
         // Render visualization
         console.log('Calling renderVisualization with', state.commits.length, 'commits and', state.branches.length, 'branches');
         renderVisualization();
-        
+
         const commitTypeBreakdown = overview.significantCommits.reduce((acc, c) => {
             acc[c.type] = (acc[c.type] || 0) + 1;
             return acc;
         }, {});
         console.log('Commit types:', commitTypeBreakdown);
-        
+
         updateCanvasInfo(`${state.commits.length} significant commits (${state.branches.length} branches)`);
         updateStatus('repo-status', `Loaded overview: ${state.commits.length} commits, ${state.branches.length} branches`);
-        
+
     } catch (err) {
         console.error('Load error:', err);
         updateStatus('repo-status', `Error: ${err.message}`, true);
@@ -278,7 +366,7 @@ async function applyBranchFilter() {
 
         // Reload commits for filtered branches
         await loadRepository();
-        
+
     } catch (err) {
         console.error('Filter error:', err);
     }
@@ -293,7 +381,7 @@ async function startReplay() {
 
     try {
         updateStatus('replay-status', 'Starting replay...');
-        
+
         const response = await fetch(
             `${API_URL}/api/repositories/${state.repositoryId}/replay/start`,
             {
@@ -314,10 +402,10 @@ async function startReplay() {
 
         // Clear visualization for replay
         clearVisualization();
-        
+
         updateStatus('replay-status', `Playing ${session.totalCommits} commits at ${state.replaySpeed}x`);
         setReplayButtonState(true);
-        
+
     } catch (err) {
         console.error('Replay start error:', err);
         updateStatus('replay-status', 'Failed to start replay', true);
@@ -364,16 +452,16 @@ async function stopReplay() {
             `${API_URL}/api/repositories/${state.repositoryId}/replay/${state.replaySessionId}/stop`,
             { method: 'POST' }
         );
-        
+
         await state.connection.invoke('UnsubscribeFromReplay', state.replaySessionId);
-        
+
         state.replaySessionId = null;
         updateStatus('replay-status', 'Stopped');
         setReplayButtonState(false);
-        
+
         // Reload full visualization
         await loadRepository();
-        
+
     } catch (err) {
         console.error('Stop error:', err);
     }
@@ -388,13 +476,13 @@ async function startMonitoring() {
             `${API_URL}/api/monitoring/start/${state.repositoryId}`,
             { method: 'POST' }
         );
-        
+
         await state.connection.invoke('SubscribeToRepository', state.repositoryId);
-        
+
         updateStatus('monitor-status', 'Monitoring active (5s polling)');
         document.getElementById('monitor-start').disabled = true;
         document.getElementById('monitor-stop').disabled = false;
-        
+
     } catch (err) {
         console.error('Monitor start error:', err);
     }
@@ -408,13 +496,13 @@ async function stopMonitoring() {
             `${API_URL}/api/monitoring/stop/${state.repositoryId}`,
             { method: 'POST' }
         );
-        
+
         await state.connection.invoke('UnsubscribeFromRepository', state.repositoryId);
-        
+
         updateStatus('monitor-status', 'Monitoring stopped');
         document.getElementById('monitor-start').disabled = false;
         document.getElementById('monitor-stop').disabled = true;
-        
+
     } catch (err) {
         console.error('Monitor stop error:', err);
     }
@@ -462,7 +550,7 @@ function updateStatus(elementId, message, isError = false) {
 function updateStats(repo) {
     state.stats.totalCommits = repo.totalCommits;
     state.stats.totalBranches = repo.totalBranches;
-    
+
     document.getElementById('stat-commits').textContent = repo.totalCommits;
     document.getElementById('stat-branches').textContent = repo.totalBranches;
 }
@@ -484,13 +572,13 @@ function showCommitDetail(commit) {
     document.getElementById('detail-date').textContent = new Date(commit.timestamp).toLocaleString();
     document.getElementById('detail-branches').textContent = commit.branches.join(', ');
     document.getElementById('detail-message').textContent = commit.message;
-    
+
     if (commit.stats) {
         document.getElementById('detail-additions').textContent = `+${commit.stats.linesAdded}`;
         document.getElementById('detail-deletions').textContent = `-${commit.stats.linesRemoved}`;
         document.getElementById('detail-files').textContent = `${commit.stats.filesChanged} files`;
     }
-    
+
     document.getElementById('commit-detail').classList.remove('hidden');
 }
 

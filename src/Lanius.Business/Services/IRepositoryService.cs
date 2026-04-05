@@ -42,4 +42,10 @@ public interface IRepositoryService
     /// </summary>
     /// <param name="repositoryId">The repository ID.</param>
     Task DeleteRepositoryAsync(string repositoryId);
+
+    /// <summary>
+    /// List all locally cloned repositories.
+    /// </summary>
+    /// <returns>List of repository information.</returns>
+    Task<IEnumerable<RepositoryInfo>> ListRepositoriesAsync();
 }

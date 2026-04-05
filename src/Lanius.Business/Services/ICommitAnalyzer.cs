@@ -7,17 +7,6 @@ namespace Lanius.Business.Services;
 /// </summary>
 public interface ICommitAnalyzer
 {
-    /// <summary>
-    /// Get all commits from a repository.
-    /// </summary>
-    /// <param name="repositoryId">The repository ID.</param>
-    /// <param name="branchName">Optional branch filter.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>List of commits.</returns>
-    Task<IReadOnlyList<Commit>> GetCommitsAsync(
-        string repositoryId,
-        string? branchName = null,
-        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a specific commit by SHA.
@@ -26,6 +15,18 @@ public interface ICommitAnalyzer
     /// <param name="sha">The commit SHA.</param>
     /// <returns>The commit, or null if not found.</returns>
     Task<Commit?> GetCommitAsync(string repositoryId, string sha);
+    /// <summary>
+    /// Get all commits from a repository.
+    /// </summary>
+    /// <param name="repositoryId">The repository ID.</param>
+    /// <param name="branchName">Optional branch filter.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of commits.</returns>
+
+    Task<IReadOnlyList<Commit>> GetCommitsAsync(
+        string repositoryId,
+        string? branchName = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get commits in chronological order (for replay mode).

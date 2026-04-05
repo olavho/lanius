@@ -9,22 +9,12 @@ namespace Lanius.Api.Services;
 /// <summary>
 /// Service that bridges replay sessions with SignalR for real-time streaming to clients.
 /// </summary>
-public class ReplaySignalRBridge
+public class ReplaySignalRBridge(
+    IReplayService replayService,
+    IHubContext<RepositoryHub> hubContext,
+    ILogger<ReplaySignalRBridge> logger)
 {
-    private readonly IReplayService _replayService;
-    private readonly IHubContext<RepositoryHub> _hubContext;
-    private readonly ILogger<ReplaySignalRBridge> _logger;
-    private readonly Dictionary<string, IDisposable> _subscriptions = new();
-
-    public ReplaySignalRBridge(
-        IReplayService replayService,
-        IHubContext<RepositoryHub> hubContext,
-        ILogger<ReplaySignalRBridge> logger)
-    {
-        _replayService = replayService;
-        _hubContext = hubContext;
-        _logger = logger;
-    }
+    private readonly Dictionary<string, IDisposable> _subscriptions = [];
 
     /// <summary>
     /// Start streaming a replay session to SignalR clients.
@@ -32,16 +22,16 @@ public class ReplaySignalRBridge
     /// <param name="sessionId">Replay session ID.</param>
     public void StartStreaming(string sessionId)
     {
-        var session = _replayService.GetSession(sessionId);
+        var session = replayService.GetSession(sessionId);
         if (session == null)
         {
-            _logger.LogWarning("Cannot start streaming for non-existent session: {SessionId}", sessionId);
+            logger.LogWarning("Cannot start streaming for non-existent session: {SessionId}", sessionId);
             return;
         }
 
-        _logger.LogInformation("Starting SignalR streaming for replay session: {SessionId}", sessionId);
+        logger.LogInformation("Starting SignalR streaming for replay session: {SessionId}", sessionId);
 
-        var stream = _replayService.GetCommitStream(sessionId);
+        var stream = replayService.GetCommitStream(sessionId);
 
         var subscription = stream.Subscribe(
             onNext: commit =>
@@ -55,7 +45,7 @@ public class ReplaySignalRBridge
                     Timestamp = commit.Timestamp,
                     Message = commit.Message,
                     ShortMessage = commit.ShortMessage,
-                    ParentShas = commit.ParentShas.ToList(),
+                    ParentShas = [.. commit.ParentShas],
                     IsMerge = commit.IsMerge,
                     Stats = commit.Stats != null ? new DiffStatsResponse
                     {
@@ -66,29 +56,29 @@ public class ReplaySignalRBridge
                         FilesChanged = commit.Stats.FilesChanged,
                         ColorIndicator = commit.Stats.ColorIndicator
                     } : null,
-                    Branches = commit.Branches.ToList()
+                    Branches = [.. commit.Branches]
                 };
 
                 // Broadcast to replay group
-                _hubContext.Clients.Group($"replay:{sessionId}")
+                hubContext.Clients.Group($"replay:{sessionId}")
                     .SendAsync("ReplayCommit", commitResponse);
 
-                _logger.LogDebug("Streamed commit {Sha} for session {SessionId}", commit.Sha, sessionId);
+                logger.LogDebug("Streamed commit {Sha} for session {SessionId}", commit.Sha, sessionId);
             },
             onError: error =>
             {
-                _logger.LogError(error, "Error in replay stream for session: {SessionId}", sessionId);
-                _hubContext.Clients.Group($"replay:{sessionId}")
+                logger.LogError(error, "Error in replay stream for session: {SessionId}", sessionId);
+                hubContext.Clients.Group($"replay:{sessionId}")
                     .SendAsync("ReplayError", new { sessionId, message = error.Message });
-                
+
                 CleanupSubscription(sessionId);
             },
             onCompleted: () =>
             {
-                _logger.LogInformation("Replay stream completed for session: {SessionId}", sessionId);
-                _hubContext.Clients.Group($"replay:{sessionId}")
+                logger.LogInformation("Replay stream completed for session: {SessionId}", sessionId);
+                hubContext.Clients.Group($"replay:{sessionId}")
                     .SendAsync("ReplayCompleted", new { sessionId });
-                
+
                 CleanupSubscription(sessionId);
             });
 
@@ -104,7 +94,7 @@ public class ReplaySignalRBridge
     /// <param name="sessionId">Replay session ID.</param>
     public void StopStreaming(string sessionId)
     {
-        _logger.LogInformation("Stopping SignalR streaming for replay session: {SessionId}", sessionId);
+        logger.LogInformation("Stopping SignalR streaming for replay session: {SessionId}", sessionId);
         CleanupSubscription(sessionId);
     }
 

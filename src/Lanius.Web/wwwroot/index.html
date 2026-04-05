@@ -25,6 +25,12 @@
                 <section class="control-panel">
                     <h2 class="panel-title">Repository</h2>
                     <div class="control-group">
+                        <label class="control-label">Existing Repositories</label>
+                        <select id="repo-select" class="input-field">
+                            <option value="">-- Select or enter new URL --</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
                         <input type="text" id="repo-url" class="input-field" 
                                placeholder="https://github.com/user/repo.git">
                         <button id="clone-btn" class="btn btn-primary">Clone</button>

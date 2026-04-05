@@ -1,22 +1,15 @@
 using Lanius.Business.Models;
 using LibGit2Sharp;
-using GitBranch = LibGit2Sharp.Branch;
 using DomainBranch = Lanius.Business.Models.Branch;
+using GitBranch = LibGit2Sharp.Branch;
 
 namespace Lanius.Business.Services;
 
 /// <summary>
 /// Service for analyzing Git branches using LibGit2Sharp.
 /// </summary>
-public class BranchAnalyzer : IBranchAnalyzer
+public class BranchAnalyzer(IRepositoryService repositoryService) : IBranchAnalyzer
 {
-    private readonly IRepositoryService _repositoryService;
-
-    public BranchAnalyzer(IRepositoryService repositoryService)
-    {
-        _repositoryService = repositoryService;
-    }
-
     public async Task<IReadOnlyList<DomainBranch>> GetBranchesAsync(
         string repositoryId,
         bool includeRemote = true,
@@ -125,7 +118,7 @@ public class BranchAnalyzer : IBranchAnalyzer
 
             var branchNamesList = branchNames.ToList();
             var branches = new List<GitBranch>();
-            
+
             // Get branch objects
             foreach (var branchName in branchNamesList)
             {
@@ -140,9 +133,9 @@ public class BranchAnalyzer : IBranchAnalyzer
             {
                 return new BranchOverview
                 {
-                    Branches = new List<BranchInfo>(),
-                    SignificantCommits = new List<SignificantCommitInfo>(),
-                    Relationships = new List<CommitRelation>()
+                    Branches = [],
+                    SignificantCommits = [],
+                    Relationships = []
                 };
             }
 
@@ -162,7 +155,7 @@ public class BranchAnalyzer : IBranchAnalyzer
                 {
                     significantCommits[commit.Sha] = CreateSignificantCommit(
                         commit,
-                        new List<string> { mainBranch.FriendlyName },
+                        [mainBranch.FriendlyName],
                         CommitSignificance.BranchHead); // Will update if needed
                 }
             }
@@ -171,9 +164,9 @@ public class BranchAnalyzer : IBranchAnalyzer
             if (mainCommits.Count > 0)
             {
                 var headSha = mainBranch.Tip.Sha;
-                if (significantCommits.ContainsKey(headSha))
+                if (significantCommits.TryGetValue(headSha, out SignificantCommitInfo? value))
                 {
-                    significantCommits[headSha].Significance = CommitSignificance.BranchHead;
+                    value.Significance = CommitSignificance.BranchHead;
                 }
             }
 
@@ -182,37 +175,35 @@ public class BranchAnalyzer : IBranchAnalyzer
             {
                 // Add branch head
                 var branchHead = branch.Tip;
-                if (!significantCommits.ContainsKey(branchHead.Sha))
+                if (!significantCommits.TryGetValue(branchHead.Sha, out SignificantCommitInfo? value))
                 {
                     significantCommits[branchHead.Sha] = CreateSignificantCommit(
                         branchHead,
-                        new List<string> { branch.FriendlyName },
+                        [branch.FriendlyName],
                         CommitSignificance.BranchHead);
                 }
                 else
                 {
-                    significantCommits[branchHead.Sha].Branches.Add(branch.FriendlyName);
+                    value.Branches.Add(branch.FriendlyName);
                 }
 
                 // Find merge base (divergence point) with main branch
                 try
                 {
                     var mergeBase = repo.ObjectDatabase.FindMergeBase(mainBranch.Tip, branch.Tip);
-                    
+
                     if (mergeBase != null)
                     {
                         // Add merge base as significant commit
-                        if (!significantCommits.ContainsKey(mergeBase.Sha))
+                        if (!significantCommits.TryGetValue(mergeBase.Sha, out SignificantCommitInfo? existing))
                         {
                             significantCommits[mergeBase.Sha] = CreateSignificantCommit(
                                 mergeBase,
-                                new List<string> { mainBranch.FriendlyName },
+                                [mainBranch.FriendlyName],
                                 CommitSignificance.MergeBase);
                         }
                         else
                         {
-                            // This commit is already in main timeline, mark it as a split point
-                            var existing = significantCommits[mergeBase.Sha];
                             if (!existing.Branches.Contains(mainBranch.FriendlyName))
                             {
                                 existing.Branches.Add(mainBranch.FriendlyName);
@@ -241,20 +232,20 @@ public class BranchAnalyzer : IBranchAnalyzer
                         if (branchCommits.Count > 0)
                         {
                             var firstCommitOnBranch = branchCommits.Last(); // Last in the list = first chronologically
-                            
-                            if (!significantCommits.ContainsKey(firstCommitOnBranch.Sha))
+
+                            if (!significantCommits.TryGetValue(firstCommitOnBranch.Sha, out SignificantCommitInfo? significantCommit))
                             {
                                 significantCommits[firstCommitOnBranch.Sha] = CreateSignificantCommit(
                                     firstCommitOnBranch,
-                                    new List<string> { branch.FriendlyName },
+                                    [branch.FriendlyName],
                                     CommitSignificance.MergeBase); // Mark as significant for visualization
                             }
                             else
                             {
                                 // Already exists, just add branch name
-                                if (!significantCommits[firstCommitOnBranch.Sha].Branches.Contains(branch.FriendlyName))
+                                if (!significantCommit.Branches.Contains(branch.FriendlyName))
                                 {
-                                    significantCommits[firstCommitOnBranch.Sha].Branches.Add(branch.FriendlyName);
+                                    significantCommit.Branches.Add(branch.FriendlyName);
                                 }
                             }
                         }
@@ -278,9 +269,9 @@ public class BranchAnalyzer : IBranchAnalyzer
             // Sort branches by their divergence point (merge base timestamp)
             // Main branch should be first, then others sorted by when they diverged
             var branchInfoList = new List<BranchInfo>();
-            
+
             // Add main branch first
-            var mainBranchInfo = branchInfoListUnsorted.FirstOrDefault(b => 
+            var mainBranchInfo = branchInfoListUnsorted.FirstOrDefault(b =>
                 b.Name == mainBranch.FriendlyName);
             if (mainBranchInfo != null)
             {
@@ -288,39 +279,38 @@ public class BranchAnalyzer : IBranchAnalyzer
             }
 
             // Sort other branches by their merge base timestamp (when they diverged)
-            var otherBranches = branchInfoListUnsorted.Where(b => 
+            var otherBranches = branchInfoListUnsorted.Where(b =>
                 b.Name != mainBranch.FriendlyName).ToList();
-            
+
             // Create a map of branch -> merge base timestamp
             var branchDivergenceTime = new Dictionary<string, DateTimeOffset>();
             foreach (var rel in relationships)
             {
-                if (significantCommits.ContainsKey(rel.CommitSha))
+                if (significantCommits.TryGetValue(rel.CommitSha, out SignificantCommitInfo? significantCommit))
                 {
-                    var mergeBaseTime = significantCommits[rel.CommitSha].Timestamp;
+                    var mergeBaseTime = significantCommit.Timestamp;
                     branchDivergenceTime[rel.Branch2] = mergeBaseTime;
                 }
             }
 
             // Sort other branches by divergence time (oldest first)
             var sortedOtherBranches = otherBranches
-                .OrderBy(b => branchDivergenceTime.ContainsKey(b.Name) 
-                    ? branchDivergenceTime[b.Name] 
-                    : DateTimeOffset.MaxValue) // Branches without merge base go last
+                .OrderBy(b => branchDivergenceTime.TryGetValue(b.Name, out DateTimeOffset value)
+                    ? value : DateTimeOffset.MaxValue) // Branches without merge base go last
                 .ToList();
-            
+
             branchInfoList.AddRange(sortedOtherBranches);
 
             return new BranchOverview
             {
                 Branches = branchInfoList,
-                SignificantCommits = significantCommits.Values.ToList(),
+                SignificantCommits = [.. significantCommits.Values],
                 Relationships = relationships
             };
         }, cancellationToken);
     }
 
-    private SignificantCommitInfo CreateSignificantCommit(
+    private static SignificantCommitInfo CreateSignificantCommit(
         LibGit2Sharp.Commit commit,
         List<string> branches,
         CommitSignificance significance)
@@ -341,16 +331,16 @@ public class BranchAnalyzer : IBranchAnalyzer
 
     private Repository OpenRepository(string repositoryId)
     {
-        if (!_repositoryService.RepositoryExists(repositoryId))
+        if (!repositoryService.RepositoryExists(repositoryId))
         {
             throw new InvalidOperationException($"Repository not found: {repositoryId}");
         }
 
-        var info = _repositoryService.GetRepositoryInfoAsync(repositoryId).Result;
+        var info = repositoryService.GetRepositoryInfoAsync(repositoryId).Result;
         return new Repository(info!.LocalPath);
     }
 
-    private DomainBranch MapBranch(GitBranch gitBranch, Repository repo)
+    private static DomainBranch MapBranch(GitBranch gitBranch, Repository repo)
     {
         var upstreamBranch = gitBranch.TrackedBranch?.FriendlyName;
         int? commitsAhead = null;

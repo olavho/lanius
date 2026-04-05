@@ -1,6 +1,6 @@
 @Lanius.Api_HostAddress = http://localhost:5104
 
-GET {{Lanius.Api_HostAddress}}/weatherforecast/
+GET {{Lanius.Api_HostAddress}}/repository/
 Accept: application/json
 
 ###

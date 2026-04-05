@@ -6,18 +6,10 @@ namespace Lanius.Api.Controllers;
 
 [ApiController]
 [Route("api/repositories/{repositoryId}/[controller]")]
-public class CommitsController : ControllerBase
+public class CommitsController(
+    ICommitAnalyzer commitAnalyzer,
+    ILogger<CommitsController> logger) : ControllerBase
 {
-    private readonly ICommitAnalyzer _commitAnalyzer;
-    private readonly ILogger<CommitsController> _logger;
-
-    public CommitsController(
-        ICommitAnalyzer commitAnalyzer,
-        ILogger<CommitsController> logger)
-    {
-        _commitAnalyzer = commitAnalyzer;
-        _logger = logger;
-    }
 
     /// <summary>
     /// Get all commits from a repository.
@@ -36,10 +28,10 @@ public class CommitsController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Getting commits for repository: {Id}, branch: {Branch}", 
+            logger.LogInformation("Getting commits for repository: {Id}, branch: {Branch}",
                 repositoryId, branch ?? "all");
 
-            var commits = await _commitAnalyzer.GetCommitsAsync(repositoryId, branch, cancellationToken);
+            var commits = await commitAnalyzer.GetCommitsAsync(repositoryId, branch, cancellationToken);
 
             var response = commits.Select(c => new CommitResponse
             {
@@ -49,7 +41,7 @@ public class CommitsController : ControllerBase
                 Timestamp = c.Timestamp,
                 Message = c.Message,
                 ShortMessage = c.ShortMessage,
-                ParentShas = c.ParentShas.ToList(),
+                ParentShas = [.. c.ParentShas],
                 IsMerge = c.IsMerge,
                 Stats = c.Stats != null ? new DiffStatsResponse
                 {
@@ -60,14 +52,14 @@ public class CommitsController : ControllerBase
                     FilesChanged = c.Stats.FilesChanged,
                     ColorIndicator = c.Stats.ColorIndicator
                 } : null,
-                Branches = c.Branches.ToList()
+                Branches = [.. c.Branches]
             });
 
             return Ok(response);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",
@@ -90,7 +82,7 @@ public class CommitsController : ControllerBase
     {
         try
         {
-            var commit = await _commitAnalyzer.GetCommitAsync(repositoryId, sha);
+            var commit = await commitAnalyzer.GetCommitAsync(repositoryId, sha);
 
             if (commit == null)
             {
@@ -110,7 +102,7 @@ public class CommitsController : ControllerBase
                 Timestamp = commit.Timestamp,
                 Message = commit.Message,
                 ShortMessage = commit.ShortMessage,
-                ParentShas = commit.ParentShas.ToList(),
+                ParentShas = [.. commit.ParentShas],
                 IsMerge = commit.IsMerge,
                 Stats = commit.Stats != null ? new DiffStatsResponse
                 {
@@ -121,12 +113,12 @@ public class CommitsController : ControllerBase
                     FilesChanged = commit.Stats.FilesChanged,
                     ColorIndicator = commit.Stats.ColorIndicator
                 } : null,
-                Branches = commit.Branches.ToList()
+                Branches = [.. commit.Branches]
             });
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",
@@ -155,9 +147,9 @@ public class CommitsController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Getting chronological commits for repository: {Id}", repositoryId);
+            logger.LogInformation("Getting chronological commits for repository: {Id}", repositoryId);
 
-            var commits = await _commitAnalyzer.GetCommitsChronologicallyAsync(
+            var commits = await commitAnalyzer.GetCommitsChronologicallyAsync(
                 repositoryId, startDate, endDate, cancellationToken);
 
             var response = commits.Select(c => new CommitResponse
@@ -168,7 +160,7 @@ public class CommitsController : ControllerBase
                 Timestamp = c.Timestamp,
                 Message = c.Message,
                 ShortMessage = c.ShortMessage,
-                ParentShas = c.ParentShas.ToList(),
+                ParentShas = [.. c.ParentShas],
                 IsMerge = c.IsMerge,
                 Stats = c.Stats != null ? new DiffStatsResponse
                 {
@@ -179,14 +171,14 @@ public class CommitsController : ControllerBase
                     FilesChanged = c.Stats.FilesChanged,
                     ColorIndicator = c.Stats.ColorIndicator
                 } : null,
-                Branches = c.Branches.ToList()
+                Branches = [.. c.Branches]
             });
 
             return Ok(response);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {Id}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",

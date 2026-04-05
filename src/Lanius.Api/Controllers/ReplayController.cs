@@ -7,18 +7,10 @@ namespace Lanius.Api.Controllers;
 
 [ApiController]
 [Route("api/repositories/{repositoryId}/replay")]
-public class ReplayController : ControllerBase
+public class ReplayController(
+    IReplayService replayService,
+    ILogger<ReplayController> logger) : ControllerBase
 {
-    private readonly IReplayService _replayService;
-    private readonly ILogger<ReplayController> _logger;
-
-    public ReplayController(
-        IReplayService replayService,
-        ILogger<ReplayController> logger)
-    {
-        _replayService = replayService;
-        _logger = logger;
-    }
 
     /// <summary>
     /// Start a new replay session.
@@ -38,7 +30,7 @@ public class ReplayController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Starting replay for repository {RepositoryId} with speed {Speed}",
+            logger.LogInformation("Starting replay for repository {RepositoryId} with speed {Speed}",
                 repositoryId, request.Speed);
 
             var options = new ReplayOptions
@@ -49,7 +41,7 @@ public class ReplayController : ControllerBase
                 BranchFilter = request.BranchFilter
             };
 
-            var session = await _replayService.StartReplayAsync(repositoryId, options, cancellationToken);
+            var session = await replayService.StartReplayAsync(repositoryId, options, cancellationToken);
 
             return Ok(new ReplaySessionResponse
             {
@@ -65,7 +57,7 @@ public class ReplayController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Repository not found: {RepositoryId}", repositoryId);
+            logger.LogWarning(ex, "Repository not found: {RepositoryId}", repositoryId);
             return NotFound(new ErrorResponse
             {
                 Error = "RepositoryNotFound",
@@ -75,7 +67,7 @@ public class ReplayController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting replay for repository: {RepositoryId}", repositoryId);
+            logger.LogError(ex, "Error starting replay for repository: {RepositoryId}", repositoryId);
             return StatusCode(500, new ErrorResponse
             {
                 Error = "ReplayStartFailed",
@@ -97,11 +89,12 @@ public class ReplayController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public IActionResult PauseReplay(string repositoryId, string sessionId)
     {
-        _logger.LogInformation("Pausing replay session: {SessionId}", sessionId);
+        ArgumentNullException.ThrowIfNull(repositoryId);
+        logger.LogInformation("Pausing replay session: {SessionId}", sessionId);
 
-        _replayService.PauseReplay(sessionId);
+        replayService.PauseReplay(sessionId);
 
-        var session = _replayService.GetSession(sessionId);
+        var session = replayService.GetSession(sessionId);
         if (session == null)
         {
             return NotFound(new ErrorResponse
@@ -126,11 +119,12 @@ public class ReplayController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public IActionResult ResumeReplay(string repositoryId, string sessionId)
     {
-        _logger.LogInformation("Resuming replay session: {SessionId}", sessionId);
+        ArgumentNullException.ThrowIfNull(repositoryId);
+        logger.LogInformation("Resuming replay session: {SessionId}", sessionId);
 
-        _replayService.ResumeReplay(sessionId);
+        replayService.ResumeReplay(sessionId);
 
-        var session = _replayService.GetSession(sessionId);
+        var session = replayService.GetSession(sessionId);
         if (session == null)
         {
             return NotFound(new ErrorResponse
@@ -154,9 +148,10 @@ public class ReplayController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult StopReplay(string repositoryId, string sessionId)
     {
-        _logger.LogInformation("Stopping replay session: {SessionId}", sessionId);
+        ArgumentNullException.ThrowIfNull(repositoryId);
+        logger.LogInformation("Stopping replay session: {SessionId}", sessionId);
 
-        _replayService.StopReplay(sessionId);
+        replayService.StopReplay(sessionId);
 
         return Ok(new { message = "Replay stopped", sessionId });
     }
@@ -173,6 +168,7 @@ public class ReplayController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public IActionResult SetSpeed(string repositoryId, string sessionId, [FromBody] double speed)
     {
+        ArgumentNullException.ThrowIfNull(repositoryId);
         if (speed <= 0 || speed > 10)
         {
             return BadRequest(new ErrorResponse
@@ -183,9 +179,9 @@ public class ReplayController : ControllerBase
             });
         }
 
-        _logger.LogInformation("Setting replay speed to {Speed} for session: {SessionId}", speed, sessionId);
+        logger.LogInformation("Setting replay speed to {Speed} for session: {SessionId}", speed, sessionId);
 
-        _replayService.SetSpeed(sessionId, speed);
+        replayService.SetSpeed(sessionId, speed);
 
         return Ok(new { message = "Speed updated", sessionId, speed });
     }
@@ -201,7 +197,8 @@ public class ReplayController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public ActionResult<ReplaySessionResponse> GetSession(string repositoryId, string sessionId)
     {
-        var session = _replayService.GetSession(sessionId);
+        ArgumentNullException.ThrowIfNull(repositoryId);
+        var session = replayService.GetSession(sessionId);
 
         if (session == null)
         {

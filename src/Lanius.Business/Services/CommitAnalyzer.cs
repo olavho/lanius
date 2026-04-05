@@ -1,22 +1,14 @@
-using Lanius.Business.Models;
 using LibGit2Sharp;
-using GitCommit = LibGit2Sharp.Commit;
 using DomainCommit = Lanius.Business.Models.Commit;
+using GitCommit = LibGit2Sharp.Commit;
 
 namespace Lanius.Business.Services;
 
 /// <summary>
 /// Service for analyzing Git commits using LibGit2Sharp.
 /// </summary>
-public class CommitAnalyzer : ICommitAnalyzer
+public class CommitAnalyzer(IRepositoryService repositoryService) : ICommitAnalyzer
 {
-    private readonly IRepositoryService _repositoryService;
-
-    public CommitAnalyzer(IRepositoryService repositoryService)
-    {
-        _repositoryService = repositoryService;
-    }
-
     public async Task<IReadOnlyList<DomainCommit>> GetCommitsAsync(
         string repositoryId,
         string? branchName = null,
@@ -28,7 +20,7 @@ public class CommitAnalyzer : ICommitAnalyzer
 
             var commits = branchName != null
                 ? GetCommitsForBranch(repo, branchName)
-                : repo.Commits.ToList();
+                : [.. repo.Commits];
 
             return commits.Select(c => MapCommit(c, repo)).ToList() as IReadOnlyList<DomainCommit>;
         }, cancellationToken);
@@ -94,16 +86,16 @@ public class CommitAnalyzer : ICommitAnalyzer
 
     private Repository OpenRepository(string repositoryId)
     {
-        if (!_repositoryService.RepositoryExists(repositoryId))
+        if (!repositoryService.RepositoryExists(repositoryId))
         {
             throw new InvalidOperationException($"Repository not found: {repositoryId}");
         }
 
-        var info = _repositoryService.GetRepositoryInfoAsync(repositoryId).Result;
+        var info = repositoryService.GetRepositoryInfoAsync(repositoryId).Result;
         return new Repository(info!.LocalPath);
     }
 
-    private DomainCommit MapCommit(GitCommit gitCommit, Repository repo)
+    private static DomainCommit MapCommit(GitCommit gitCommit, Repository repo)
     {
         var stats = CalculateDiffStats(repo, gitCommit);
         var branches = GetBranchesForCommit(repo, gitCommit);
@@ -115,13 +107,13 @@ public class CommitAnalyzer : ICommitAnalyzer
             AuthorEmail = gitCommit.Author.Email,
             Timestamp = gitCommit.Author.When,
             Message = gitCommit.Message,
-            ParentShas = gitCommit.Parents.Select(p => p.Sha).ToList(),
+            ParentShas = [.. gitCommit.Parents.Select(p => p.Sha)],
             Stats = stats,
             Branches = branches
         };
     }
 
-    private Models.DiffStats CalculateDiffStats(Repository repo, GitCommit commit)
+    private static Models.DiffStats CalculateDiffStats(Repository repo, GitCommit commit)
     {
         if (!commit.Parents.Any())
         {
@@ -150,10 +142,10 @@ public class CommitAnalyzer : ICommitAnalyzer
 
     private static List<GitCommit> GetCommitsForBranch(Repository repo, string branchName)
     {
-        var branch = repo.Branches[branchName] 
+        var branch = repo.Branches[branchName]
             ?? throw new InvalidOperationException($"Branch not found: {branchName}");
 
-        return branch.Commits.ToList();
+        return [.. branch.Commits];
     }
 
     private static List<string> GetBranchesForCommit(Repository repo, GitCommit commit)

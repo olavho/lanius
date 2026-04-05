@@ -27,7 +27,8 @@ public class RepositoryService : IRepositoryService
                 "Repository storage BasePath is not configured. Please set RepositoryStorage:BasePath in appsettings.json");
         }
 
-        _logger?.LogInformation("Initializing RepositoryService with BasePath: {BasePath}", _options.BasePath);
+        _logger?.LogInformation("Initializing RepositoryService with BasePath: {BasePath}",
+                                _options.BasePath);
         EnsureBasePathExists();
     }
 
@@ -161,9 +162,11 @@ public class RepositoryService : IRepositoryService
                 var refsBefore = repo.Refs.Count();
 
                 var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-                var fetchOptions = new FetchOptions();
-                fetchOptions.CredentialsProvider = (_url, _user, _cred) =>
-                    new DefaultCredentials();
+                var fetchOptions = new FetchOptions
+                {
+                    CredentialsProvider = (_url, _user, _cred) =>
+                        new DefaultCredentials()
+                };
 
                 Commands.Fetch(repo, remote.Name, refSpecs, fetchOptions, null);
 
@@ -191,7 +194,14 @@ public class RepositoryService : IRepositoryService
         using var repo = new Repository(localPath);
 
         var defaultBranch = repo.Head.FriendlyName;
-        var totalCommits = repo.Commits.Count();
+
+        // Count unique commits across all branches (not just HEAD)
+        var totalCommits = repo.Branches
+            .SelectMany(b => b.Commits)
+            .Select(c => c.Sha)
+            .Distinct()
+            .Count();
+
         var totalBranches = repo.Branches.Count();
 
         // Try to get clone timestamp from .git directory creation time
@@ -244,7 +254,7 @@ public class RepositoryService : IRepositoryService
         });
     }
 
-    private string GenerateRepositoryId(string url)
+    private static string GenerateRepositoryId(string url)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(url));
         return Convert.ToHexString(hash)[..16].ToLowerInvariant();
@@ -262,6 +272,50 @@ public class RepositoryService : IRepositoryService
             _logger?.LogInformation("Creating base path: {BasePath}", _options.BasePath);
             Directory.CreateDirectory(_options.BasePath);
         }
+    }
+
+    public Task<IEnumerable<RepositoryInfo>> ListRepositoriesAsync()
+    {
+        var repositories = new List<RepositoryInfo>();
+
+        if (!Directory.Exists(_options.BasePath))
+        {
+            return Task.FromResult<IEnumerable<RepositoryInfo>>(repositories);
+        }
+
+        // Enumerate all directories in the base path
+        var repoDirs = Directory.GetDirectories(_options.BasePath);
+
+        foreach (var repoDir in repoDirs)
+        {
+            try
+            {
+                // Check if it's a valid Git repository
+                if (!Repository.IsValid(repoDir))
+                {
+                    continue;
+                }
+
+                var repoId = Path.GetFileName(repoDir);
+                var infoTask = GetRepositoryInfoAsync(repoId);
+                var info = infoTask.Result;
+
+                if (info != null)
+                {
+                    repositories.Add(info);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to read repository info from {Path}", repoDir);
+                // Continue with next repository
+            }
+        }
+
+        // Sort by most recently cloned/fetched
+        var sorted = repositories.OrderByDescending(r => r.LastFetchedAt ?? r.ClonedAt);
+
+        return Task.FromResult<IEnumerable<RepositoryInfo>>(sorted);
     }
 
     private static void RemoveReadOnlyAttributes(string path)

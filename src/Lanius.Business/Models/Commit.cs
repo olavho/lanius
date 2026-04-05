@@ -53,5 +53,5 @@ public class Commit
     /// <summary>
     /// Branch names that include this commit.
     /// </summary>
-    public IReadOnlyList<string> Branches { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> Branches { get; init; } = [];
 }
