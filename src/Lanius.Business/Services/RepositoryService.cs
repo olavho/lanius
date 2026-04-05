@@ -183,6 +183,11 @@ public class RepositoryService : IRepositoryService
 
     public Task<RepositoryInfo?> GetRepositoryInfoAsync(string repositoryId)
     {
+        return GetRepositoryInfoAsync(repositoryId, includeCommitCount: true);
+    }
+
+    private Task<RepositoryInfo?> GetRepositoryInfoAsync(string repositoryId, bool includeCommitCount)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryId);
 
         var localPath = GetRepositoryPath(repositoryId);
@@ -195,12 +200,31 @@ public class RepositoryService : IRepositoryService
 
         var defaultBranch = repo.Head.FriendlyName;
 
-        // Count unique commits across all branches (not just HEAD)
-        var totalCommits = repo.Branches
-            .SelectMany(b => b.Commits)
-            .Select(c => c.Sha)
-            .Distinct()
-            .Count();
+        // Count unique commits efficiently using a HashSet
+        // For large repositories, this is faster than SelectMany + Distinct + Count
+        // Skip this expensive operation when just listing repositories
+        int totalCommits = 0;
+        if (includeCommitCount)
+        {
+            try
+            {
+                var commitShas = new HashSet<string>();
+                foreach (var branch in repo.Branches)
+                {
+                    foreach (var commit in branch.Commits)
+                    {
+                        commitShas.Add(commit.Sha);
+                    }
+                }
+                totalCommits = commitShas.Count;
+            }
+            catch (Exception ex)
+            {
+                // If we fail to enumerate all commits, fall back to HEAD count
+                _logger?.LogWarning(ex, "Failed to count all commits for {RepositoryId}, falling back to HEAD count", repositoryId);
+                totalCommits = repo.Commits.Count();
+            }
+        }
 
         var totalBranches = repo.Branches.Count();
 
@@ -297,7 +321,8 @@ public class RepositoryService : IRepositoryService
                 }
 
                 var repoId = Path.GetFileName(repoDir);
-                var infoTask = GetRepositoryInfoAsync(repoId);
+                // Skip commit counting for list operation (performance optimization)
+                var infoTask = GetRepositoryInfoAsync(repoId, includeCommitCount: false);
                 var info = infoTask.Result;
 
                 if (info != null)

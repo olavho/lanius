@@ -136,24 +136,32 @@ async function cloneRepository() {
 // Load existing repositories into dropdown
 async function loadExistingRepositories() {
     try {
+        const select = document.getElementById('repo-select');
+
+        // Show loading state
+        select.innerHTML = '<option value="">Loading repositories...</option>';
+        select.disabled = true;
+
         const response = await fetch(`${API_URL}/api/repository`);
 
         if (!response.ok) {
             console.warn('Failed to load existing repositories');
+            select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+            select.disabled = false;
             return;
         }
 
         const repositories = await response.json();
-        const select = document.getElementById('repo-select');
 
-        // Clear existing options except the first one
+        // Clear and re-enable select
         select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+        select.disabled = false;
 
-        // Add repositories to dropdown
+        // Add repositories to dropdown (without commit count for performance)
         repositories.forEach(repo => {
             const option = document.createElement('option');
             option.value = repo.id;
-            option.textContent = `${repo.url} (${repo.totalCommits} commits)`;
+            option.textContent = repo.url;
             option.dataset.url = repo.url;
             select.appendChild(option);
         });
@@ -161,6 +169,9 @@ async function loadExistingRepositories() {
         console.log(`Loaded ${repositories.length} existing repositories`);
     } catch (err) {
         console.error('Error loading existing repositories:', err);
+        const select = document.getElementById('repo-select');
+        select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+        select.disabled = false;
     }
 }
 
