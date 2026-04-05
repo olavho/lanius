@@ -1,7 +1,7 @@
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
-using Lanius.Business.Models;
-using Lanius.Business.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -12,7 +12,6 @@ public class CalendarLayoutEngineTests
 {
     private Mock<ICommitAnalyzer> _mockCommitAnalyzer = null!;
     private Mock<IBranchAnalyzer> _mockBranchAnalyzer = null!;
-    private Mock<IRepositoryService> _mockRepositoryService = null!;
     private Mock<ILogger<CalendarLayoutEngine>> _mockLogger = null!;
     private CalendarLayoutEngine _layoutEngine = null!;
 
@@ -21,13 +20,11 @@ public class CalendarLayoutEngineTests
     {
         _mockCommitAnalyzer = new Mock<ICommitAnalyzer>();
         _mockBranchAnalyzer = new Mock<IBranchAnalyzer>();
-        _mockRepositoryService = new Mock<IRepositoryService>();
         _mockLogger = new Mock<ILogger<CalendarLayoutEngine>>();
 
         _layoutEngine = new CalendarLayoutEngine(
             _mockCommitAnalyzer.Object,
             _mockBranchAnalyzer.Object,
-            _mockRepositoryService.Object,
             _mockLogger.Object
         );
     }
@@ -752,7 +749,7 @@ public class CalendarLayoutEngineTests
 
         var groups = _layoutEngine.GroupCommitsByMonth(commits);
 
-        Assert.AreEqual(36, groups.Count, "3 years × 12 months = 36 groups");
+        Assert.HasCount(36, groups, "3 years × 12 months = 36 groups");
         Assert.IsTrue(groups.All(g => g.CommitCount > 0), "All groups should have commits");
         Assert.AreEqual(1200, groups.Sum(g => g.CommitCount), "All commits should be accounted for");
     }
@@ -765,7 +762,7 @@ public class CalendarLayoutEngineTests
 
         var groups = _layoutEngine.GroupCommitsByDay(commits);
 
-        Assert.AreEqual(1000, groups.Count, "1 commit per day = 1000 day groups");
+        Assert.HasCount(1000, groups, "1 commit per day = 1000 day groups");
         Assert.IsTrue(groups.All(g => g.CommitCount == 1), "Each group should have exactly 1 commit");
         Assert.AreEqual(1000, groups.Sum(g => g.CommitCount));
     }
@@ -793,7 +790,7 @@ public class CalendarLayoutEngineTests
 
         var groups = _layoutEngine.GroupCommitsByYear(commits);
 
-        Assert.AreEqual(10, groups.Count, "10 years = 10 year groups");
+        Assert.HasCount(10, groups, "10 years = 10 year groups");
         Assert.AreEqual(2000, groups.Sum(g => g.CommitCount));
         Assert.IsTrue(groups.All(g => g.PeriodStart.Month == 1 && g.PeriodStart.Day == 1), "PeriodStart = Jan 1");
         Assert.IsTrue(groups.All(g => g.PeriodEnd.Month == 12 && g.PeriodEnd.Day == 31), "PeriodEnd = Dec 31");
@@ -814,7 +811,7 @@ public class CalendarLayoutEngineTests
         var result = await _layoutEngine.CalculateLayoutAsync("test-repo", options, cancellationToken: TestContext.CancellationToken);
 
         // > 5 years span → auto-selected Year granularity → 10 nodes
-        Assert.AreEqual(10, result.Nodes.Count, "10 years = 10 year nodes");
+        Assert.HasCount(10, result.Nodes, "10 years = 10 year nodes");
         Assert.AreEqual(1200, result.TotalCommits);
     }
 

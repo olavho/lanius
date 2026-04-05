@@ -1,7 +1,8 @@
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
-using Lanius.Business.Models;
-using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -20,7 +21,7 @@ public class LogicalLayoutEngineTests
 {
     private Mock<ICommitAnalyzer> _mockCommitAnalyzer = null!;
     private Mock<IBranchAnalyzer> _mockBranchAnalyzer = null!;
-    private Mock<IRepositoryService> _mockRepositoryService = null!;
+    private Mock<IRepositoryStorageService> _mockRepositoryService = null!;
     private Mock<ILoggerFactory> _mockLoggerFactory = null!;
     private Mock<ILogger<LogicalLayoutEngine>> _mockLogger = null!;
     private LogicalLayoutEngine _layoutEngine = null!;
@@ -32,7 +33,7 @@ public class LogicalLayoutEngineTests
     {
         _mockCommitAnalyzer = new Mock<ICommitAnalyzer>();
         _mockBranchAnalyzer = new Mock<IBranchAnalyzer>();
-        _mockRepositoryService = new Mock<IRepositoryService>();
+        _mockRepositoryService = new Mock<IRepositoryStorageService>();
         _mockLogger = new Mock<ILogger<LogicalLayoutEngine>>();
         _mockLoggerFactory = new Mock<ILoggerFactory>();
 
@@ -43,16 +44,8 @@ public class LogicalLayoutEngineTests
 
         // Setup repository service to return a valid repository info
         _mockRepositoryService
-            .Setup(x => x.GetRepositoryInfoAsync(It.IsAny<string>()))
-            .ReturnsAsync(new RepositoryInfo
-            {
-                Id = "test-repo",
-                Url = "https://github.com/test/repo",
-                LocalPath = @"C:\temp\test-repo",
-                DefaultBranch = "main",
-                ClonedAt = DateTimeOffset.UtcNow,
-                LastFetchedAt = DateTimeOffset.UtcNow
-            });
+            .Setup(x => x.GetRepositoryPath(It.IsAny<string>()))
+            .Returns(@"C:\temp\test-repo");
 
         _layoutEngine = new LogicalLayoutEngine(
             _mockCommitAnalyzer.Object,

@@ -1,5 +1,5 @@
 using Lanius.Api.DTOs;
-using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lanius.Api.Controllers;
@@ -7,7 +7,7 @@ namespace Lanius.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 public class RepositoryController(
-    IRepositoryService repositoryService,
+    IRepositoryStorageService repositoryService,
     ILogger<RepositoryController> logger) : ControllerBase
 {
 

@@ -1,4 +1,4 @@
-namespace Lanius.Business.Models;
+namespace Lanius.Business.Analysis.Models;
 
 /// <summary>
 /// Simplified branch overview containing only significant commits.

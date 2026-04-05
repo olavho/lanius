@@ -1,7 +1,8 @@
 using Lanius.Business.Layout.Models;
-using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
+using DomainBranch = Lanius.Business.Analysis.Models.Branch;
 
 namespace Lanius.Business.Layout.Services;
 
@@ -9,7 +10,7 @@ namespace Lanius.Business.Layout.Services;
 /// Analyzes branch hierarchy to determine parent relationships and merge bases.
 /// </summary>
 public class BranchHierarchyAnalyzer(
-    IRepositoryService repositoryService,
+    IRepositoryStorageService repositoryStorageService,
     ILogger<BranchHierarchyAnalyzer> logger)
 {
     /// <summary>
@@ -17,7 +18,7 @@ public class BranchHierarchyAnalyzer(
     /// </summary>
     public async Task<List<BranchHierarchyInfo>> AnalyzeBranchHierarchyAsync(
         string repositoryId,
-        List<Lanius.Business.Models.Branch> branches,
+        List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -62,7 +63,7 @@ public class BranchHierarchyAnalyzer(
 
     private List<BranchHierarchyInfo> AnalyzeBranchHierarchyWithRepository(
         Repository repo,
-        List<Lanius.Business.Models.Branch> branches,
+        List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress)
     {
         var result = new List<BranchHierarchyInfo>();
@@ -224,9 +225,8 @@ public class BranchHierarchyAnalyzer(
 
     private Repository OpenRepository(string repositoryId)
     {
-        var repoInfo = repositoryService.GetRepositoryInfoAsync(repositoryId).GetAwaiter().GetResult();
-        return repoInfo == null
-            ? throw new InvalidOperationException($"Repository not found: {repositoryId}")
-            : new Repository(repoInfo.LocalPath);
+        if (!repositoryStorageService.RepositoryExists(repositoryId))
+            throw new InvalidOperationException($"Repository not found: {repositoryId}");
+        return new Repository(repositoryStorageService.GetRepositoryPath(repositoryId));
     }
 }

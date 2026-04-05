@@ -1,5 +1,5 @@
 using Lanius.Business.Configuration;
-using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Options;
 
@@ -9,7 +9,7 @@ namespace Lanius.Business.Test.Services;
 public class RepositoryServiceTests
 {
     private string _testBasePath = null!;
-    private RepositoryService _service = null!;
+    private RepositoryStorageService _service = null!;
     private const int CleanupRetryCount = 3;
     private const int CleanupRetryDelayMs = 200;
 
@@ -24,7 +24,7 @@ public class RepositoryServiceTests
             BasePath = _testBasePath
         });
 
-        _service = new RepositoryService(options, null);
+        _service = new RepositoryStorageService(options, null);
     }
 
     [TestCleanup]

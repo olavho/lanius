@@ -1,11 +1,11 @@
-using Lanius.Business.Models;
+using Lanius.Business.Storage.Models;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Storage.Services;
 
 /// <summary>
-/// Service for Git repository operations (clone, fetch, pull).
+/// Service for Git repository storage operations (clone, fetch, delete, list).
 /// </summary>
-public interface IRepositoryService
+public interface IRepositoryStorageService
 {
     /// <summary>
     /// Clone a repository from a URL.
@@ -48,4 +48,11 @@ public interface IRepositoryService
     /// </summary>
     /// <returns>List of repository information.</returns>
     Task<IEnumerable<RepositoryInfo>> ListRepositoriesAsync();
+
+    /// <summary>
+    /// Get the local file system path for a repository.
+    /// </summary>
+    /// <param name="repositoryId">The repository ID.</param>
+    /// <returns>Absolute local path to the repository directory.</returns>
+    string GetRepositoryPath(string repositoryId);
 }

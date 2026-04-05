@@ -1,4 +1,4 @@
-namespace Lanius.Business.Models;
+namespace Lanius.Business.Analysis.Models;
 
 /// <summary>
 /// Represents a Git commit with metadata and statistics.

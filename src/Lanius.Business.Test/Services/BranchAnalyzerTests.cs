@@ -1,15 +1,15 @@
-using Lanius.Business.Services;
+using Lanius.Business.Analysis.Services;
+using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Moq;
-using DomainBranch = Lanius.Business.Models.Branch;
-using DomainRepositoryInfo = Lanius.Business.Models.RepositoryInfo;
+using DomainBranch = Lanius.Business.Analysis.Models.Branch;
 
 namespace Lanius.Business.Test.Services;
 
 [TestClass]
 public class BranchAnalyzerTests
 {
-    private Mock<IRepositoryService> _mockRepoService = null!;
+    private Mock<IRepositoryStorageService> _mockRepoService = null!;
     private BranchAnalyzer _analyzer = null!;
     private string _testRepoId = null!;
     private readonly List<string> _tempPaths = [];
@@ -20,7 +20,7 @@ public class BranchAnalyzerTests
     public void Setup()
     {
         _testRepoId = "test-repo";
-        _mockRepoService = new Mock<IRepositoryService>();
+        _mockRepoService = new Mock<IRepositoryStorageService>();
         _analyzer = new BranchAnalyzer(_mockRepoService.Object);
     }
 
@@ -254,21 +254,6 @@ public class BranchAnalyzerTests
     private void SetupMockRepository(string localPath)
     {
         _mockRepoService.Setup(x => x.RepositoryExists(_testRepoId)).Returns(true);
-
-        // Get the actual default branch name
-        using var repo = new Repository(localPath);
-        var defaultBranch = repo.Head.FriendlyName;
-
-        _mockRepoService.Setup(x => x.GetRepositoryInfoAsync(_testRepoId))
-            .ReturnsAsync(new DomainRepositoryInfo
-            {
-                Id = _testRepoId,
-                Url = "test://repo",
-                LocalPath = localPath,
-                DefaultBranch = defaultBranch,
-                ClonedAt = DateTimeOffset.UtcNow,
-                TotalCommits = 1,
-                TotalBranches = 1
-            });
+        _mockRepoService.Setup(x => x.GetRepositoryPath(_testRepoId)).Returns(localPath);
     }
 }

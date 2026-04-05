@@ -1,15 +1,17 @@
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
-using DomainCommit = Lanius.Business.Models.Commit;
+using DomainCommit = Lanius.Business.Analysis.Models.Commit;
 using GitCommit = LibGit2Sharp.Commit;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Analysis.Services;
 
 /// <summary>
 /// Service for analyzing Git commits using LibGit2Sharp.
 /// </summary>
 public class CommitAnalyzer(
-    IRepositoryService repositoryService,
+    IRepositoryStorageService repositoryStorageService,
     ILogger<CommitAnalyzer> logger) : ICommitAnalyzer
 {
     public async Task<IReadOnlyList<DomainCommit>> GetCommitsAsync(
@@ -84,7 +86,7 @@ public class CommitAnalyzer(
         }, cancellationToken);
     }
 
-    public Task<Models.DiffStats?> GetCommitStatsAsync(string repositoryId, string sha)
+    public Task<DiffStats?> GetCommitStatsAsync(string repositoryId, string sha)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
 
@@ -93,23 +95,19 @@ public class CommitAnalyzer(
 
         if (commit == null)
         {
-            return Task.FromResult<Models.DiffStats?>(null);
+            return Task.FromResult<DiffStats?>(null);
         }
 
         // Calculate stats while repo is still open
         var stats = CalculateDiffStats(repo, commit);
-        return Task.FromResult<Models.DiffStats?>(stats);
+        return Task.FromResult<DiffStats?>(stats);
     }
 
     private Repository OpenRepository(string repositoryId)
     {
-        if (!repositoryService.RepositoryExists(repositoryId))
-        {
+        if (!repositoryStorageService.RepositoryExists(repositoryId))
             throw new InvalidOperationException($"Repository not found: {repositoryId}");
-        }
-
-        var info = repositoryService.GetRepositoryInfoAsync(repositoryId).Result;
-        return new Repository(info!.LocalPath);
+        return new Repository(repositoryStorageService.GetRepositoryPath(repositoryId));
     }
 
     private static DomainCommit MapCommit(GitCommit gitCommit, Repository repo)
@@ -139,7 +137,7 @@ public class CommitAnalyzer(
     {
         // Skip diff stats entirely for layout - saves ~20ms per commit
         // Diff stats are only needed for commit detail views, not visualization
-        var stats = new Models.DiffStats
+        var stats = new DiffStats
         {
             LinesAdded = 0,
             LinesRemoved = 0,
@@ -159,14 +157,14 @@ public class CommitAnalyzer(
         };
     }
 
-    private static Models.DiffStats CalculateDiffStats(Repository repo, GitCommit commit)
+    private static DiffStats CalculateDiffStats(Repository repo, GitCommit commit)
     {
         if (!commit.Parents.Any())
         {
             // Initial commit - compare against empty tree
             var tree = commit.Tree;
             var patch = repo.Diff.Compare<Patch>(null, tree);
-            return new Models.DiffStats
+            return new DiffStats
             {
                 LinesAdded = patch.LinesAdded,
                 LinesRemoved = patch.LinesDeleted,
@@ -178,7 +176,7 @@ public class CommitAnalyzer(
         var parent = commit.Parents.First();
         var diffPatch = repo.Diff.Compare<Patch>(parent.Tree, commit.Tree);
 
-        return new Models.DiffStats
+        return new DiffStats
         {
             LinesAdded = diffPatch.LinesAdded,
             LinesRemoved = diffPatch.LinesDeleted,

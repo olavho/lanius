@@ -1,22 +1,22 @@
 using Lanius.Business.Configuration;
-using Lanius.Business.Models;
+using Lanius.Business.Storage.Models;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Storage.Services;
 
 /// <summary>
-/// Service for Git repository operations using LibGit2Sharp.
+/// Service for Git repository storage operations using LibGit2Sharp.
 /// </summary>
-public class RepositoryService : IRepositoryService
+public class RepositoryStorageService : IRepositoryStorageService
 {
     private readonly RepositoryStorageOptions _options;
-    private readonly ILogger<RepositoryService>? _logger;
+    private readonly ILogger<RepositoryStorageService>? _logger;
 
-    public RepositoryService(IOptions<RepositoryStorageOptions> options, ILogger<RepositoryService>? logger = null)
+    public RepositoryStorageService(IOptions<RepositoryStorageOptions> options, ILogger<RepositoryStorageService>? logger = null)
     {
         _options = options.Value;
         _logger = logger;
@@ -27,7 +27,7 @@ public class RepositoryService : IRepositoryService
                 "Repository storage BasePath is not configured. Please set RepositoryStorage:BasePath in appsettings.json");
         }
 
-        _logger?.LogInformation("Initializing RepositoryService with BasePath: {BasePath}",
+        _logger?.LogInformation("Initializing RepositoryStorageService with BasePath: {BasePath}",
                                 _options.BasePath);
         EnsureBasePathExists();
     }
@@ -284,7 +284,7 @@ public class RepositoryService : IRepositoryService
         return Convert.ToHexString(hash)[..16].ToLowerInvariant();
     }
 
-    private string GetRepositoryPath(string repositoryId)
+    public string GetRepositoryPath(string repositoryId)
     {
         return Path.Combine(_options.BasePath, repositoryId);
     }

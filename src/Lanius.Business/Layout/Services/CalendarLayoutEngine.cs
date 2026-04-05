@@ -1,6 +1,6 @@
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
-using Lanius.Business.Models;
-using Lanius.Business.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Lanius.Business.Layout.Services;
@@ -12,7 +12,6 @@ namespace Lanius.Business.Layout.Services;
 public class CalendarLayoutEngine(
     ICommitAnalyzer commitAnalyzer,
     IBranchAnalyzer branchAnalyzer,
-    IRepositoryService repositoryService,
     ILogger<CalendarLayoutEngine> logger) : ILayoutEngine
 {
     private const int MinRadius = 4;

@@ -1,14 +1,15 @@
-using Lanius.Business.Models;
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
-using DomainBranch = Lanius.Business.Models.Branch;
+using DomainBranch = Lanius.Business.Analysis.Models.Branch;
 using GitBranch = LibGit2Sharp.Branch;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Analysis.Services;
 
 /// <summary>
 /// Service for analyzing Git branches using LibGit2Sharp.
 /// </summary>
-public class BranchAnalyzer(IRepositoryService repositoryService) : IBranchAnalyzer
+public class BranchAnalyzer(IRepositoryStorageService repositoryStorageService) : IBranchAnalyzer
 {
     public async Task<IReadOnlyList<DomainBranch>> GetBranchesAsync(
         string repositoryId,
@@ -331,13 +332,9 @@ public class BranchAnalyzer(IRepositoryService repositoryService) : IBranchAnaly
 
     private Repository OpenRepository(string repositoryId)
     {
-        if (!repositoryService.RepositoryExists(repositoryId))
-        {
+        if (!repositoryStorageService.RepositoryExists(repositoryId))
             throw new InvalidOperationException($"Repository not found: {repositoryId}");
-        }
-
-        var info = repositoryService.GetRepositoryInfoAsync(repositoryId).Result;
-        return new Repository(info!.LocalPath);
+        return new Repository(repositoryStorageService.GetRepositoryPath(repositoryId));
     }
 
     private static DomainBranch MapBranch(GitBranch gitBranch, Repository repo)

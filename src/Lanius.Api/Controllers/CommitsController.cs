@@ -1,5 +1,5 @@
 using Lanius.Api.DTOs;
-using Lanius.Business.Services;
+using Lanius.Business.Analysis.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lanius.Api.Controllers;

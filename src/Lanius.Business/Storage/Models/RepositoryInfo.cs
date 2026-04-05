@@ -1,4 +1,4 @@
-namespace Lanius.Business.Models;
+namespace Lanius.Business.Storage.Models;
 
 /// <summary>
 /// Information about a Git repository.

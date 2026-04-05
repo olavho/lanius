@@ -1,5 +1,7 @@
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
-using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Lanius.Business.Layout.Services;
@@ -11,7 +13,7 @@ namespace Lanius.Business.Layout.Services;
 public class LogicalLayoutEngine(
     ICommitAnalyzer commitAnalyzer,
     IBranchAnalyzer branchAnalyzer,
-    IRepositoryService repositoryService,
+    IRepositoryStorageService repositoryStorageService,
     ILoggerFactory loggerFactory) : ILayoutEngine
 {
     private readonly ILogger<LogicalLayoutEngine> _logger = loggerFactory.CreateLogger<LogicalLayoutEngine>();
@@ -76,12 +78,12 @@ public class LogicalLayoutEngine(
         };
     }
 
-    private async Task<List<Lanius.Business.Models.Branch>> LoadBranchesAsync(
+    private async Task<List<Branch>> LoadBranchesAsync(
         string repositoryId,
         string? branchFilter,
         CancellationToken cancellationToken)
     {
-        List<Lanius.Business.Models.Branch> branches;
+        List<Branch> branches;
 
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
@@ -107,9 +109,9 @@ public class LogicalLayoutEngine(
         return remoteBranches;
     }
 
-    private async Task<Dictionary<string, List<Lanius.Business.Models.Commit>>> LoadAllCommitsAsync(
+    private async Task<Dictionary<string, List<Commit>>> LoadAllCommitsAsync(
         string repositoryId,
-        List<Lanius.Business.Models.Branch> branches,
+        List<Branch> branches,
         IProgress<LayoutProgress>? progress,
         CancellationToken cancellationToken)
     {
@@ -119,7 +121,7 @@ public class LogicalLayoutEngine(
         progress?.Report(new LayoutProgress(10, "Analyzing branch hierarchy...", 0, branches.Count));
 
         var hierarchyAnalyzer = new BranchHierarchyAnalyzer(
-            repositoryService,
+            repositoryStorageService,
             loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
 
         var hierarchyInfo = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
@@ -191,7 +193,7 @@ public class LogicalLayoutEngine(
     }
 
     private static Dictionary<string, double> AssignBranchLanes(
-        List<Lanius.Business.Models.Branch> branches,
+        List<Branch> branches,
         LayoutOptions options)
     {
         var lanes = new Dictionary<string, double>();
@@ -207,8 +209,8 @@ public class LogicalLayoutEngine(
     }
 
     private static List<LayoutNode> CalculateNodePositions(
-        List<Lanius.Business.Models.Commit> allCommits,
-        Dictionary<string, List<Lanius.Business.Models.Commit>> branchCommits,
+        List<Commit> allCommits,
+        Dictionary<string, List<Commit>> branchCommits,
         Dictionary<string, double> branchLanes,
         LayoutOptions options)
     {
@@ -282,7 +284,7 @@ public class LogicalLayoutEngine(
 
     private static List<LayoutEdge> CalculateEdges(
         List<LayoutNode> nodes,
-        Dictionary<string, List<Lanius.Business.Models.Commit>> branchCommits)
+        Dictionary<string, List<Commit>> branchCommits)
     {
         var edges = new List<LayoutEdge>();
         var nodeDict = nodes.ToDictionary(n => n.CommitId);

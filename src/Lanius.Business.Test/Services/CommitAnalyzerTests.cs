@@ -1,17 +1,17 @@
-using Lanius.Business.Services;
+using Lanius.Business.Analysis.Services;
+using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 using Moq;
-using DomainCommit = Lanius.Business.Models.Commit;
-using DomainDiffStats = Lanius.Business.Models.DiffStats;
-using DomainRepositoryInfo = Lanius.Business.Models.RepositoryInfo;
+using DomainCommit = Lanius.Business.Analysis.Models.Commit;
+using DomainDiffStats = Lanius.Business.Analysis.Models.DiffStats;
 
 namespace Lanius.Business.Test.Services;
 
 [TestClass]
 public class CommitAnalyzerTests
 {
-    private Mock<IRepositoryService> _mockRepoService = null!;
+    private Mock<IRepositoryStorageService> _mockRepoService = null!;
     private Mock<ILogger<CommitAnalyzer>> _mockLogger = null!;
     private CommitAnalyzer _analyzer = null!;
     private string _testRepoId = null!;
@@ -23,7 +23,7 @@ public class CommitAnalyzerTests
     public void Setup()
     {
         _testRepoId = "test-repo";
-        _mockRepoService = new Mock<IRepositoryService>();
+        _mockRepoService = new Mock<IRepositoryStorageService>();
         _mockLogger = new Mock<ILogger<CommitAnalyzer>>();
         _analyzer = new CommitAnalyzer(_mockRepoService.Object, _mockLogger.Object);
     }
@@ -200,21 +200,6 @@ public class CommitAnalyzerTests
     private void SetupMockRepository(string localPath)
     {
         _mockRepoService.Setup(x => x.RepositoryExists(_testRepoId)).Returns(true);
-
-        // Get the actual default branch name
-        using var repo = new Repository(localPath);
-        var defaultBranch = repo.Head.FriendlyName;
-
-        _mockRepoService.Setup(x => x.GetRepositoryInfoAsync(_testRepoId))
-            .ReturnsAsync(new DomainRepositoryInfo
-            {
-                Id = _testRepoId,
-                Url = "test://repo",
-                LocalPath = localPath,
-                DefaultBranch = defaultBranch,
-                ClonedAt = DateTimeOffset.UtcNow,
-                TotalCommits = 1,
-                TotalBranches = 1
-            });
+        _mockRepoService.Setup(x => x.GetRepositoryPath(_testRepoId)).Returns(localPath);
     }
 }

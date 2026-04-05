@@ -1,6 +1,6 @@
-using Lanius.Business.Models;
+using Lanius.Business.Analysis.Models;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Analysis.Services;
 
 /// <summary>
 /// Service for analyzing Git commits.

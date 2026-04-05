@@ -1,8 +1,10 @@
 using Lanius.Api.Hubs;
 using Lanius.Api.Services;
+using Lanius.Business.Analysis.Services;
 using Lanius.Business.Configuration;
 using Lanius.Business.Layout.Services;
 using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,7 +31,7 @@ builder.Services.Configure<MonitoringOptions>(
     builder.Configuration.GetSection(MonitoringOptions.SectionName));
 
 // Register business services
-builder.Services.AddSingleton<IRepositoryService, RepositoryService>();
+builder.Services.AddSingleton<IRepositoryStorageService, RepositoryStorageService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
 

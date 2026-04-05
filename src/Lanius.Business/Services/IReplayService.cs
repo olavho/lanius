@@ -1,3 +1,4 @@
+using Lanius.Business.Analysis.Models;
 using Lanius.Business.Models;
 
 namespace Lanius.Business.Services;
