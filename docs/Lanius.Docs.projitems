@@ -67,6 +67,7 @@
     <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-12-phase-4a-backend-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\TESTING-QUICK-START.md" />
     <None Include="$(MSBuildThisFileDirectory)clarifications-needed.md" />
+    <None Include="$(MSBuildThisFileDirectory)features\layout-mode-guide.md" />
     <None Include="$(MSBuildThisFileDirectory)mvp-implementation-summary.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\2025.11.16-InitialPlan.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\layout-architecture-refactoring.md" />

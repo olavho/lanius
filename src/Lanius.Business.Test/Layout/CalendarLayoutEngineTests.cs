@@ -394,6 +394,7 @@ public class CalendarLayoutEngineTests
         var options = new LayoutOptions
         {
             Mode = LayoutMode.Calendar,
+            Granularity = CalendarGranularity.Month, // Explicit: span < 150 days would auto-select Day
             CanvasWidth = 1000,
             CanvasHeight = 600
         };
@@ -485,7 +486,368 @@ public class CalendarLayoutEngineTests
 
     #endregion
 
+    #region GroupCommitsByDay Tests
+
+    [TestMethod]
+    public void GroupCommitsByDay_EmptyList_ReturnsEmptyGroups()
+    {
+        var groups = _layoutEngine.GroupCommitsByDay([]);
+        Assert.IsEmpty(groups);
+    }
+
+    [TestMethod]
+    public void GroupCommitsByDay_SameDayCommits_ReturnsSingleGroup()
+    {
+        var commits = new List<Commit>
+        {
+            CreateCommit("a", new DateTimeOffset(2026, 4, 5, 8, 0, 0, TimeSpan.Zero)),
+            CreateCommit("b", new DateTimeOffset(2026, 4, 5, 14, 0, 0, TimeSpan.Zero)),
+            CreateCommit("c", new DateTimeOffset(2026, 4, 5, 22, 0, 0, TimeSpan.Zero))
+        };
+
+        var groups = _layoutEngine.GroupCommitsByDay(commits);
+
+        Assert.HasCount(1, groups);
+        Assert.AreEqual(3, groups[0].CommitCount);
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 5, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodStart);
+    }
+
+    [TestMethod]
+    public void GroupCommitsByDay_DifferentDays_ReturnsMultipleGroupsInOrder()
+    {
+        var commits = new List<Commit>
+        {
+            CreateCommit("d3", new DateTimeOffset(2026, 4, 5, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("d1", new DateTimeOffset(2026, 4, 1, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("d2", new DateTimeOffset(2026, 4, 3, 10, 0, 0, TimeSpan.Zero))
+        };
+
+        var groups = _layoutEngine.GroupCommitsByDay(commits);
+
+        Assert.HasCount(3, groups);
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 1, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodStart);
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 3, 0, 0, 0, TimeSpan.Zero), groups[1].PeriodStart);
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 5, 0, 0, 0, TimeSpan.Zero), groups[2].PeriodStart);
+    }
+
+    #endregion
+
+    #region GroupCommitsByWeek Tests
+
+    [TestMethod]
+    public void GroupCommitsByWeek_EmptyList_ReturnsEmptyGroups()
+    {
+        var groups = _layoutEngine.GroupCommitsByWeek([]);
+        Assert.IsEmpty(groups);
+    }
+
+    [TestMethod]
+    public void GroupCommitsByWeek_SameWeekCommits_ReturnsSingleGroup()
+    {
+        // Mon Apr 6 - Sun Apr 12, 2026
+        var commits = new List<Commit>
+        {
+            CreateCommit("a", new DateTimeOffset(2026, 4, 6, 10, 0, 0, TimeSpan.Zero)),  // Mon
+            CreateCommit("b", new DateTimeOffset(2026, 4, 9, 10, 0, 0, TimeSpan.Zero)),  // Thu
+            CreateCommit("c", new DateTimeOffset(2026, 4, 12, 10, 0, 0, TimeSpan.Zero))  // Sun
+        };
+
+        var groups = _layoutEngine.GroupCommitsByWeek(commits);
+
+        Assert.HasCount(1, groups);
+        Assert.AreEqual(3, groups[0].CommitCount);
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 6, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodStart, "Week starts on Monday");
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 12, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodEnd, "Week ends on Sunday");
+    }
+
+    [TestMethod]
+    public void GroupCommitsByWeek_WeekBoundary_SundayAndMondayInDifferentWeeks()
+    {
+        // Sun Apr 12 is end of week1; Mon Apr 13 starts week2
+        var commits = new List<Commit>
+        {
+            CreateCommit("w1", new DateTimeOffset(2026, 4, 12, 23, 0, 0, TimeSpan.Zero)), // Sun → week1
+            CreateCommit("w2", new DateTimeOffset(2026, 4, 13, 1, 0, 0, TimeSpan.Zero))  // Mon → week2
+        };
+
+        var groups = _layoutEngine.GroupCommitsByWeek(commits);
+
+        Assert.HasCount(2, groups, "Sunday and Monday should be in different weeks");
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 6, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodStart, "Week 1 starts Mon Apr 6");
+        Assert.AreEqual(new DateTimeOffset(2026, 4, 13, 0, 0, 0, TimeSpan.Zero), groups[1].PeriodStart, "Week 2 starts Mon Apr 13");
+    }
+
+    #endregion
+
+    #region GroupCommitsByYear Tests
+
+    [TestMethod]
+    public void GroupCommitsByYear_EmptyList_ReturnsEmptyGroups()
+    {
+        var groups = _layoutEngine.GroupCommitsByYear([]);
+        Assert.IsEmpty(groups);
+    }
+
+    [TestMethod]
+    public void GroupCommitsByYear_SameYearCommits_ReturnsSingleGroup()
+    {
+        var commits = new List<Commit>
+        {
+            CreateCommit("a", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)),
+            CreateCommit("b", new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)),
+            CreateCommit("c", new DateTimeOffset(2026, 12, 31, 0, 0, 0, TimeSpan.Zero))
+        };
+
+        var groups = _layoutEngine.GroupCommitsByYear(commits);
+
+        Assert.HasCount(1, groups);
+        Assert.AreEqual(3, groups[0].CommitCount);
+        Assert.AreEqual(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodStart);
+        Assert.AreEqual(new DateTimeOffset(2026, 12, 31, 0, 0, 0, TimeSpan.Zero), groups[0].PeriodEnd);
+    }
+
+    [TestMethod]
+    public void GroupCommitsByYear_MultipleYears_ReturnsGroupsInOrder()
+    {
+        var commits = new List<Commit>
+        {
+            CreateCommit("y26a", new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero)),
+            CreateCommit("y24",  new DateTimeOffset(2024, 6, 1, 0, 0, 0, TimeSpan.Zero)),
+            CreateCommit("y25",  new DateTimeOffset(2025, 3, 15, 0, 0, 0, TimeSpan.Zero)),
+            CreateCommit("y26b", new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero))
+        };
+
+        var groups = _layoutEngine.GroupCommitsByYear(commits);
+
+        Assert.HasCount(3, groups);
+        Assert.AreEqual(2024, groups[0].PeriodStart.Year);
+        Assert.AreEqual(1, groups[0].CommitCount);
+        Assert.AreEqual(2025, groups[1].PeriodStart.Year);
+        Assert.AreEqual(1, groups[1].CommitCount);
+        Assert.AreEqual(2026, groups[2].PeriodStart.Year);
+        Assert.AreEqual(2, groups[2].CommitCount);
+    }
+
+    #endregion
+
+    #region Granularity Dispatch Tests
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_DayGranularity_ProducesOneDayNodePerDay()
+    {
+        // Arrange - 3 commits on different days in the same month
+        var commits = new List<Commit>
+        {
+            CreateCommit("d1", new DateTimeOffset(2026, 4, 1, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("d2", new DateTimeOffset(2026, 4, 2, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("d3", new DateTimeOffset(2026, 4, 3, 10, 0, 0, TimeSpan.Zero))
+        };
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsChronologicallyAsync(
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(commits);
+
+        var options = new LayoutOptions
+        {
+            Mode = LayoutMode.Calendar,
+            Granularity = CalendarGranularity.Day,
+            CanvasWidth = 1000,
+            CanvasHeight = 600
+        };
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync("test-repo", options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert - 3 different days → 3 nodes (not 1 month node)
+        Assert.HasCount(3, result.Nodes, "Day granularity should produce one node per day");
+        Assert.AreEqual("period-2026-04-01", result.Nodes[0].CommitId);
+        Assert.AreEqual("period-2026-04-02", result.Nodes[1].CommitId);
+        Assert.AreEqual("period-2026-04-03", result.Nodes[2].CommitId);
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_WeekGranularity_ProducesOneNodePerWeek()
+    {
+        // Arrange - 4 commits across 2 weeks
+        var commits = new List<Commit>
+        {
+            // Week 1: Mon Apr 6 – Sun Apr 12, 2026
+            CreateCommit("w1a", new DateTimeOffset(2026, 4, 6, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("w1b", new DateTimeOffset(2026, 4, 8, 10, 0, 0, TimeSpan.Zero)),
+            // Week 2: Mon Apr 13 – Sun Apr 19, 2026
+            CreateCommit("w2a", new DateTimeOffset(2026, 4, 13, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("w2b", new DateTimeOffset(2026, 4, 15, 10, 0, 0, TimeSpan.Zero))
+        };
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsChronologicallyAsync(
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(commits);
+
+        var options = new LayoutOptions
+        {
+            Mode = LayoutMode.Calendar,
+            Granularity = CalendarGranularity.Week,
+            CanvasWidth = 1000,
+            CanvasHeight = 600
+        };
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync("test-repo", options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert - 2 weeks → 2 nodes
+        Assert.HasCount(2, result.Nodes, "Week granularity should produce one node per week");
+        Assert.AreEqual("period-2026-04-06", result.Nodes[0].CommitId, "First week starts Mon Apr 6");
+        Assert.AreEqual("period-2026-04-13", result.Nodes[1].CommitId, "Second week starts Mon Apr 13");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_YearGranularity_ProducesOneNodePerYear()
+    {
+        // Arrange - 4 commits across 3 years
+        var commits = new List<Commit>
+        {
+            CreateCommit("y24a", new DateTimeOffset(2024, 6, 15, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("y24b", new DateTimeOffset(2024, 11, 1, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("y25a", new DateTimeOffset(2025, 3, 20, 10, 0, 0, TimeSpan.Zero)),
+            CreateCommit("y26a", new DateTimeOffset(2026, 1, 10, 10, 0, 0, TimeSpan.Zero))
+        };
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsChronologicallyAsync(
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(commits);
+
+        var options = new LayoutOptions
+        {
+            Mode = LayoutMode.Calendar,
+            Granularity = CalendarGranularity.Year,
+            CanvasWidth = 1000,
+            CanvasHeight = 600
+        };
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync("test-repo", options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert - 3 years → 3 nodes
+        Assert.HasCount(3, result.Nodes, "Year granularity should produce one node per year");
+        Assert.AreEqual("period-2024", result.Nodes[0].CommitId);
+        Assert.AreEqual("period-2025", result.Nodes[1].CommitId);
+        Assert.AreEqual("period-2026", result.Nodes[2].CommitId);
+    }
+
+    #endregion
+
+    #region Large Repository Tests (> 1000 commits)
+
+    [TestMethod]
+    public void GroupCommitsByMonth_1200CommitsOver3Years_Produces36Groups()
+    {
+        var commits = GenerateCommits(1200, new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero), TimeSpan.FromDays(3 * 365));
+
+        var groups = _layoutEngine.GroupCommitsByMonth(commits);
+
+        Assert.AreEqual(36, groups.Count, "3 years × 12 months = 36 groups");
+        Assert.IsTrue(groups.All(g => g.CommitCount > 0), "All groups should have commits");
+        Assert.AreEqual(1200, groups.Sum(g => g.CommitCount), "All commits should be accounted for");
+    }
+
+    [TestMethod]
+    public void GroupCommitsByDay_1000CommitsEachOnDifferentDay_Produces1000Groups()
+    {
+        // 1000 commits, 1 per day (interval = 999/999 = 1 day exactly)
+        var commits = GenerateCommits(1000, new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero), TimeSpan.FromDays(999));
+
+        var groups = _layoutEngine.GroupCommitsByDay(commits);
+
+        Assert.AreEqual(1000, groups.Count, "1 commit per day = 1000 day groups");
+        Assert.IsTrue(groups.All(g => g.CommitCount == 1), "Each group should have exactly 1 commit");
+        Assert.AreEqual(1000, groups.Sum(g => g.CommitCount));
+    }
+
+    [TestMethod]
+    public void GroupCommitsByWeek_1000CommitsOver500Weeks_ProducesApprox500Groups()
+    {
+        // 1000 commits over 500 weeks (~3.5 days per commit → ~2 per week)
+        var start = new DateTimeOffset(2014, 1, 6, 0, 0, 0, TimeSpan.Zero); // Monday
+        var commits = GenerateCommits(1000, start, TimeSpan.FromDays(500 * 7));
+
+        var groups = _layoutEngine.GroupCommitsByWeek(commits);
+
+        Assert.IsTrue(groups.Count >= 490 && groups.Count <= 510,
+            $"~500 week groups expected, got {groups.Count}");
+        Assert.IsTrue(groups.All(g => g.PeriodStart.DayOfWeek == DayOfWeek.Monday),
+            "All week groups should start on Monday");
+        Assert.AreEqual(1000, groups.Sum(g => g.CommitCount));
+    }
+
+    [TestMethod]
+    public void GroupCommitsByYear_2000CommitsOver10Years_Produces10Groups()
+    {
+        var commits = GenerateCommits(2000, new DateTimeOffset(2015, 1, 1, 0, 0, 0, TimeSpan.Zero), TimeSpan.FromDays(10 * 365));
+
+        var groups = _layoutEngine.GroupCommitsByYear(commits);
+
+        Assert.AreEqual(10, groups.Count, "10 years = 10 year groups");
+        Assert.AreEqual(2000, groups.Sum(g => g.CommitCount));
+        Assert.IsTrue(groups.All(g => g.PeriodStart.Month == 1 && g.PeriodStart.Day == 1), "PeriodStart = Jan 1");
+        Assert.IsTrue(groups.All(g => g.PeriodEnd.Month == 12 && g.PeriodEnd.Day == 31), "PeriodEnd = Dec 31");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_1200CommitsOver10Years_AutoSelectsYearGranularity()
+    {
+        var commits = GenerateCommits(1200, new DateTimeOffset(2015, 1, 1, 0, 0, 0, TimeSpan.Zero), TimeSpan.FromDays(10 * 365));
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsChronologicallyAsync(
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(commits);
+
+        var options = new LayoutOptions { Mode = LayoutMode.Calendar, CanvasWidth = 2000, CanvasHeight = 600 };
+
+        var result = await _layoutEngine.CalculateLayoutAsync("test-repo", options, cancellationToken: TestContext.CancellationToken);
+
+        // > 5 years span → auto-selected Year granularity → 10 nodes
+        Assert.AreEqual(10, result.Nodes.Count, "10 years = 10 year nodes");
+        Assert.AreEqual(1200, result.TotalCommits);
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_500CommitsOver100Days_AutoSelectsDayGranularity()
+    {
+        // 500 commits over 100 days → < 150 days → auto Day granularity → ~101 day nodes
+        var commits = GenerateCommits(500, new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), TimeSpan.FromDays(100));
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsChronologicallyAsync(
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(commits);
+
+        var options = new LayoutOptions { Mode = LayoutMode.Calendar, CanvasWidth = 2000, CanvasHeight = 600 };
+
+        var result = await _layoutEngine.CalculateLayoutAsync("test-repo", options, cancellationToken: TestContext.CancellationToken);
+
+        Assert.IsTrue(result.Nodes.Count >= 99 && result.Nodes.Count <= 101,
+            $"~101 day nodes expected for 100-day span, got {result.Nodes.Count}");
+        Assert.AreEqual(500, result.TotalCommits);
+    }
+
+    #endregion
+
     #region Helper Methods
+
+    private static IReadOnlyList<Commit> GenerateCommits(int count, DateTimeOffset start, TimeSpan totalSpan)
+    {
+        var commits = new List<Commit>(count);
+        var intervalTicks = count > 1 ? totalSpan.Ticks / (count - 1) : 0;
+        for (var i = 0; i < count; i++)
+        {
+            commits.Add(CreateCommit($"commit-{i:D5}", start.AddTicks(intervalTicks * i)));
+        }
+        return commits;
+    }
 
     private static Commit CreateCommit(string sha, DateTimeOffset timestamp)
     {

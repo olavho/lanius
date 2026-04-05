@@ -147,49 +147,42 @@ public class LogicalLayoutEngine(
             return [];
         }
 
-        // Load commits per branch using async API (allows tests to mock)
-        var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
-        int processedBranches = 0;
-        int totalBranches = hierarchyInfo.Count;
+        _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
 
-        foreach (var branchInfo in hierarchyInfo)
+        // Build batch request: each entry is (branchName, mergeBaseSha)
+        var batchRequest = hierarchyInfo
+            .Select(b => (b.Name, b.MergeBaseSha))
+            .ToList();
+
+        // PERFORMANCE FIX: single repository open for all branches
+        var batchProgress = new Progress<(int processed, int total, string currentBranch)>(p =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // Report progress BEFORE loading
-            int percentage = 20 + (int)((processedBranches / (double)totalBranches) * 40);
+            if (p.total == 0) return;
+            int percentage = 20 + (int)((p.processed / (double)p.total) * 40);
             progress?.Report(new LayoutProgress(
                 percentage,
-                $"Loading commits: {branchInfo.Name} ({processedBranches + 1}/{totalBranches})",
-                processedBranches,
-                totalBranches));
+                $"Loading commits: {p.currentBranch} ({p.processed + 1}/{p.total})",
+                p.processed,
+                p.total));
 
-            var loadStartTime = DateTimeOffset.UtcNow;
+            if (!string.IsNullOrEmpty(p.currentBranch))
+            {
+                var info = hierarchyInfo.First(b => b.Name == p.currentBranch);
+                _logger.LogInformation(
+                    "Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
+                    info.Name, info.Tier, info.MergeBaseSha?[..8] ?? "none", info.CommitCount);
+            }
+        });
 
-            _logger.LogInformation("Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
-                branchInfo.Name,
-                branchInfo.Tier,
-                branchInfo.MergeBaseSha?[..8] ?? "none",
-                branchInfo.CommitCount);
+        var batchResult = await commitAnalyzer.GetCommitsBatchAsync(
+            repositoryId,
+            batchRequest,
+            batchProgress,
+            cancellationToken);
 
-            // Use async version for testability (tests mock this)
-            var commits = await commitAnalyzer.GetCommitsSinceAsync(
-                repositoryId,
-                branchInfo.Name,
-                branchInfo.MergeBaseSha,
-                cancellationToken);
-
-            result[branchInfo.Name] = [.. commits];
-
-            var loadElapsed = (DateTimeOffset.UtcNow - loadStartTime).TotalSeconds;
-
-            _logger.LogInformation("Loaded {ActualCommits} commits for branch {BranchName} in {TotalSeconds:F2}s",
-                commits.Count,
-                branchInfo.Name,
-                loadElapsed);
-
-            processedBranches++;
-        }
+        var result = batchResult.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.ToList());
 
         var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
         _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);

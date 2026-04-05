@@ -50,22 +50,27 @@ public class CalendarLayoutEngine(
             };
         }
 
-        progress?.Report(new LayoutProgress(30, "Grouping commits by month...", 0, allCommits.Count));
-
         // Determine granularity (auto or manual)
         var granularity = DetermineGranularity(allCommits, options.Granularity);
+
+        progress?.Report(new LayoutProgress(30, $"Grouping commits by {granularity}...", 0, allCommits.Count));
 
         logger.LogInformation(
             "Calendar layout for {CommitCount} commits with {Granularity} granularity",
             allCommits.Count, granularity);
 
-        // Group commits by month (Phase 4a MVP)
-        var groups = GroupCommitsByMonth(allCommits);
+        var groups = granularity switch
+        {
+            CalendarGranularity.Day => GroupCommitsByDay(allCommits),
+            CalendarGranularity.Week => GroupCommitsByWeek(allCommits),
+            CalendarGranularity.Year => GroupCommitsByYear(allCommits),
+            _ => GroupCommitsByMonth(allCommits)
+        };
 
         progress?.Report(new LayoutProgress(60, "Calculating layout positions...", 0, groups.Count));
 
         // Calculate node positions
-        var nodes = CalculateNodePositions(groups, (int)options.CanvasWidth);
+        var nodes = CalculateNodePositions(groups, (int)options.CanvasWidth, granularity);
 
         progress?.Report(new LayoutProgress(100, "Layout complete", groups.Count, groups.Count));
 
@@ -139,11 +144,90 @@ public class CalendarLayoutEngine(
     }
 
     /// <summary>
+    /// Group commits by calendar day.
+    /// </summary>
+    public List<PeriodGroup> GroupCommitsByDay(IReadOnlyList<Commit> commits)
+    {
+        var groups = commits
+            .GroupBy(c => c.Timestamp.Date)
+            .OrderBy(g => g.Key)
+            .Select(g => new PeriodGroup
+            {
+                PeriodStart = new DateTimeOffset(g.Key, TimeSpan.Zero),
+                PeriodEnd = new DateTimeOffset(g.Key, TimeSpan.Zero),
+                CommitCount = g.Count(),
+                CommitIds = [.. g.Select(c => c.Sha)]
+            })
+            .ToList();
+
+        logger.LogInformation("Grouped {CommitCount} commits into {GroupCount} days",
+            commits.Count, groups.Count);
+
+        return groups;
+    }
+
+    /// <summary>
+    /// Group commits by ISO week (Monday-based).
+    /// </summary>
+    public List<PeriodGroup> GroupCommitsByWeek(IReadOnlyList<Commit> commits)
+    {
+        var groups = commits
+            .GroupBy(c => GetWeekStart(c.Timestamp))
+            .OrderBy(g => g.Key)
+            .Select(g => new PeriodGroup
+            {
+                PeriodStart = new DateTimeOffset(g.Key, TimeSpan.Zero),
+                PeriodEnd = new DateTimeOffset(g.Key.AddDays(6), TimeSpan.Zero),
+                CommitCount = g.Count(),
+                CommitIds = [.. g.Select(c => c.Sha)]
+            })
+            .ToList();
+
+        logger.LogInformation("Grouped {CommitCount} commits into {GroupCount} weeks",
+            commits.Count, groups.Count);
+
+        return groups;
+    }
+
+    /// <summary>
+    /// Group commits by calendar year.
+    /// </summary>
+    public List<PeriodGroup> GroupCommitsByYear(IReadOnlyList<Commit> commits)
+    {
+        var groups = commits
+            .GroupBy(c => c.Timestamp.Year)
+            .OrderBy(g => g.Key)
+            .Select(g => new PeriodGroup
+            {
+                PeriodStart = new DateTimeOffset(new DateTime(g.Key, 1, 1), TimeSpan.Zero),
+                PeriodEnd = new DateTimeOffset(new DateTime(g.Key, 12, 31), TimeSpan.Zero),
+                CommitCount = g.Count(),
+                CommitIds = [.. g.Select(c => c.Sha)]
+            })
+            .ToList();
+
+        logger.LogInformation("Grouped {CommitCount} commits into {GroupCount} years",
+            commits.Count, groups.Count);
+
+        return groups;
+    }
+
+    private static DateTime GetWeekStart(DateTimeOffset timestamp)
+    {
+        var date = timestamp.Date;
+        var diff = ((int)date.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        return date.AddDays(-diff);
+    }
+
+    /// <summary>
     /// Calculate node positions for period groups.
     /// Distributes groups evenly across canvas width.
     /// Radius scales with commit count (4-20px).
     /// </summary>
-    public static List<LayoutNode> CalculateNodePositions(List<PeriodGroup> groups, int canvasWidth)
+    public static List<LayoutNode> CalculateNodePositions(
+        List<PeriodGroup> groups,
+        int canvasWidth,
+        CalendarGranularity granularity = CalendarGranularity.Month)
     {
         if (groups.Count == 0) return [];
 
@@ -155,13 +239,13 @@ public class CalendarLayoutEngine(
 
         var nodes = groups.Select((group, index) => new LayoutNode
         {
-            CommitId = $"period-{group.PeriodStart:yyyy-MM}", // e.g., "period-2026-04"
+            CommitId = FormatPeriodId(group, granularity),
             X = marginX + (index * spacing),
             Y = CenterY, // Single horizontal row (Phase 4a)
             Radius = CalculateNodeRadius(group.CommitCount, maxCommits),
-            BranchName = "all", // All branches aggregated (Phase 4a)
+            BranchName = "all", // All branches aggregated
             Timestamp = group.PeriodStart,
-            Message = FormatPeriodLabel(group),
+            Message = FormatPeriodLabel(group, granularity),
             Author = string.Empty, // Not applicable for period groups
             IsSignificant = group.CommitCount > maxCommits * 0.7 // Top 30% activity
         }).ToList();
@@ -185,14 +269,26 @@ public class CalendarLayoutEngine(
         return Math.Round(radius, 1);
     }
 
-    /// <summary>
-    /// Format period label for tooltip.
-    /// Example: "April 2026: 42 commits"
-    /// </summary>
-    private static string FormatPeriodLabel(PeriodGroup group)
+    private static string FormatPeriodId(PeriodGroup group, CalendarGranularity granularity) =>
+        granularity switch
+        {
+            CalendarGranularity.Day => $"period-{group.PeriodStart:yyyy-MM-dd}",
+            CalendarGranularity.Week => $"period-{group.PeriodStart:yyyy-MM-dd}",
+            CalendarGranularity.Year => $"period-{group.PeriodStart:yyyy}",
+            _ => $"period-{group.PeriodStart:yyyy-MM}"
+        };
+
+    private static string FormatPeriodLabel(PeriodGroup group, CalendarGranularity granularity)
     {
-        var monthName = group.PeriodStart.ToString("MMMM yyyy");
-        return $"{monthName}: {group.CommitCount} commit{(group.CommitCount != 1 ? "s" : "")}";
+        var count = group.CommitCount;
+        var suffix = count != 1 ? "s" : "";
+        return granularity switch
+        {
+            CalendarGranularity.Day => $"{group.PeriodStart:yyyy-MM-dd}: {count} commit{suffix}",
+            CalendarGranularity.Week => $"Week of {group.PeriodStart:MMM d, yyyy}: {count} commit{suffix}",
+            CalendarGranularity.Year => $"{group.PeriodStart.Year}: {count} commit{suffix}",
+            _ => $"{group.PeriodStart:MMMM yyyy}: {count} commit{suffix}"
+        };
     }
 }
 

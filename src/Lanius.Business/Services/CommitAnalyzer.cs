@@ -200,11 +200,37 @@ public class CommitAnalyzer(
         }, cancellationToken);
     }
 
-    /// <summary>
-    /// Internal method for batch loading commits from an already-opened repository.
-    /// Use this when loading multiple branches to avoid expensive repository open/close cycles.
-    /// </summary>
-    public IReadOnlyList<DomainCommit> GetCommitsSinceInternal(
+    public Task<Dictionary<string, IReadOnlyList<DomainCommit>>> GetCommitsBatchAsync(
+        string repositoryId,
+        IReadOnlyList<(string branchName, string? sinceCommitSha)> branches,
+        IProgress<(int processed, int total, string currentBranch)>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() =>
+        {
+            var repoOpenStart = DateTimeOffset.UtcNow;
+            using var repo = OpenRepository(repositoryId);
+            var repoOpenElapsed = (DateTimeOffset.UtcNow - repoOpenStart).TotalMilliseconds;
+
+            logger.LogInformation("Opened repository once for {BranchCount} branches in {OpenTimeMs:F0}ms",
+                branches.Count, repoOpenElapsed);
+
+            var result = new Dictionary<string, IReadOnlyList<DomainCommit>>(branches.Count);
+
+            for (int i = 0; i < branches.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var (branchName, sinceCommitSha) = branches[i];
+                progress?.Report((i, branches.Count, branchName));
+                result[branchName] = GetCommitsSinceInternal(repo, branchName, sinceCommitSha);
+            }
+
+            progress?.Report((branches.Count, branches.Count, string.Empty));
+            return result;
+        }, cancellationToken);
+    }
+
+    private IReadOnlyList<DomainCommit> GetCommitsSinceInternal(
         Repository repo,
         string branchName,
         string? sinceCommitSha = null)

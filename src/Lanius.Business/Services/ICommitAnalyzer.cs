@@ -44,17 +44,19 @@ public interface ICommitAnalyzer
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Internal batch method for loading commits from an already-opened repository.
-    /// Avoids expensive repository open/close cycles when loading multiple branches.
+    /// Batch load commits for multiple branches with a single repository open.
+    /// Avoids expensive repository open/close cycles when loading many branches.
     /// </summary>
-    /// <param name="repo">Already-opened LibGit2Sharp Repository instance.</param>
-    /// <param name="branchName">Branch name.</param>
-    /// <param name="sinceCommitSha">SHA of commit to exclude (merge base). If null, returns all commits.</param>
-    /// <returns>List of commits since the specified commit.</returns>
-    IReadOnlyList<Commit> GetCommitsSinceInternal(
-        LibGit2Sharp.Repository repo,
-        string branchName,
-        string? sinceCommitSha = null);
+    /// <param name="repositoryId">The repository ID.</param>
+    /// <param name="branches">Branch names paired with their merge-base SHA (null = all commits).</param>
+    /// <param name="progress">Optional per-branch progress reporting.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Dictionary of branch name to commits since the merge base.</returns>
+    Task<Dictionary<string, IReadOnlyList<Commit>>> GetCommitsBatchAsync(
+        string repositoryId,
+        IReadOnlyList<(string branchName, string? sinceCommitSha)> branches,
+        IProgress<(int processed, int total, string currentBranch)>? progress = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get commits in chronological order (for replay mode).

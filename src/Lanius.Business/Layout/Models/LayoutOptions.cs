@@ -11,9 +11,9 @@ public record LayoutOptions
     public LayoutMode Mode { get; init; } = LayoutMode.Logical;
 
     /// <summary>
-    /// Calendar granularity (only used when Mode is Calendar).
+    /// Calendar granularity (only used when Mode is Calendar). Null means auto-detect.
     /// </summary>
-    public CalendarGranularity Granularity { get; init; } = CalendarGranularity.Month;
+    public CalendarGranularity? Granularity { get; init; } = null;
 
     /// <summary>
     /// Current zoom level (0.1 to 10.0).

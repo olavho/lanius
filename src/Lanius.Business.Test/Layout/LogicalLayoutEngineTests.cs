@@ -114,8 +114,8 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([commit]);
+            .Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit] });
 
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -174,8 +174,9 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([commit1, commit2]);
+            .Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2] });
+
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
@@ -220,8 +221,9 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([mergeCommit]);
+            .Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [mergeCommit] });
+
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
@@ -279,12 +281,13 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([commit1]);
+            .Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [commit1],
+                ["origin/develop"] = [commit2]
+            });
 
-        _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/develop", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([commit2]);
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
@@ -328,8 +331,9 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+            .Setup(x => x.GetCommitsBatchAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>());
+
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
@@ -378,8 +382,8 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([branch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([commit]);
+            .Setup(x => x.GetCommitsBatchAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit] });
 
         // Act
         await _layoutEngine.CalculateLayoutAsync(repositoryId, options, progress, TestContext.CancellationToken);
@@ -478,12 +482,12 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, featureBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([mainCommit]);
-
-        _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([mainCommit, featureCommit]);
+            .Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [mainCommit],
+                ["origin/feature"] = [mainCommit, featureCommit]
+            });
 
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -559,11 +563,12 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, featureBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/main", null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([baseCommit, mergeCommit]);
-        _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsSinceAsync(repositoryId, "origin/feature", It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([baseCommit, featureCommit]);
+            .Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [baseCommit, mergeCommit],
+                ["origin/feature"] = [baseCommit, featureCommit]
+            });
 
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);

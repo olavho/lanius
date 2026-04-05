@@ -714,58 +714,12 @@ const Visualization = (() => {
             svg.attr('width', Math.max(layout.width, container.clientWidth))
                 .attr('height', Math.max(layout.height, container.clientHeight));
 
-            // Extract branch info and render branch lines/indicators
-            const branchInfo = extractBranchInfo(layout.nodes);
-            console.log('Branch info extracted:', branchInfo.size, 'branches');
-            if (branchInfo.size > 0) {
-                renderBranchLinesForLayout(branchInfo);
+            // Render based on layout mode
+            if (layout.mode === 'Calendar') {
+                renderCalendarLayout(layout);
+            } else {
+                renderLogicalLayout(layout);
             }
-
-            // Render edges (commit connections)
-            const edgeGroups = g.selectAll('.edge')
-                .data(layout.edges)
-                .enter()
-                .append('g')
-                .attr('class', d => `edge edge-${d.type.toLowerCase()}`);
-
-            edgeGroups.each(function (d) {
-                const edge = d3.select(this);
-
-                if (d.points && d.points.length >= 2) {
-                    edge.append('line')
-                        .attr('x1', d.points[0].item1)
-                        .attr('y1', d.points[0].item2)
-                        .attr('x2', d.points[1].item1)
-                        .attr('y2', d.points[1].item2)
-                        .attr('stroke', getEdgeColor(d.type))
-                        .attr('stroke-width', getEdgeWidth(d.type))
-                        .attr('stroke-dasharray', getEdgeDashArray(d.type))
-                        .attr('opacity', 0)
-                        .transition()
-                        .duration(500)
-                        .attr('opacity', getEdgeOpacity(d.type));
-                }
-            });
-
-            // Render nodes (commits)
-            const nodeGroups = g.selectAll('.commit-node')
-                .data(layout.nodes)
-                .enter()
-                .append('g')
-                .attr('class', d => `commit-node ${d.isSignificant ? 'significant' : 'normal'}`)
-                .attr('transform', d => `translate(${d.x}, ${d.y})`)
-                .on('click', (event, d) => showNodeDetail(d))
-                .on('mouseenter', handleNodeHover)
-                .on('mouseleave', handleNodeUnhover);
-
-            nodeGroups.append('circle')
-                .attr('r', 0)
-                .attr('fill', d => getNodeColor(d))
-                .attr('stroke', config.colors.commitDefault)
-                .attr('stroke-width', d => d.isSignificant ? 1.5 : 1)
-                .transition()
-                .duration(500)
-                .attr('r', d => d.radius);
 
             // Restore zoom state after rendering
             if (currentZoom && currentZoom.k !== 1) {
@@ -777,6 +731,227 @@ const Visualization = (() => {
             console.error('Error rendering layout:', error);
             console.error('Stack trace:', error.stack);
         }
+    }
+
+    function renderLogicalLayout(layout) {
+        console.log('Rendering logical layout...');
+
+        // Extract branch info and render branch lines/indicators
+        const branchInfo = extractBranchInfo(layout.nodes);
+        console.log('Branch info extracted:', branchInfo.size, 'branches');
+        if (branchInfo.size > 0) {
+            renderBranchLinesForLayout(branchInfo);
+        }
+
+        // Render edges (commit connections)
+        const edgeGroups = g.selectAll('.edge')
+            .data(layout.edges)
+            .enter()
+            .append('g')
+            .attr('class', d => `edge edge-${d.type.toLowerCase()}`);
+
+        edgeGroups.each(function (d) {
+            const edge = d3.select(this);
+
+            if (d.points && d.points.length >= 2) {
+                edge.append('line')
+                    .attr('x1', d.points[0].item1)
+                    .attr('y1', d.points[0].item2)
+                    .attr('x2', d.points[1].item1)
+                    .attr('y2', d.points[1].item2)
+                    .attr('stroke', getEdgeColor(d.type))
+                    .attr('stroke-width', getEdgeWidth(d.type))
+                    .attr('stroke-dasharray', getEdgeDashArray(d.type))
+                    .attr('opacity', 0)
+                    .transition()
+                    .duration(500)
+                    .attr('opacity', getEdgeOpacity(d.type));
+            }
+        });
+
+        // Render nodes (commits)
+        const nodeGroups = g.selectAll('.commit-node')
+            .data(layout.nodes)
+            .enter()
+            .append('g')
+            .attr('class', d => `commit-node ${d.isSignificant ? 'significant' : 'normal'}`)
+            .attr('transform', d => `translate(${d.x}, ${d.y})`)
+            .on('click', (event, d) => showNodeDetail(d))
+            .on('mouseenter', handleNodeHover)
+            .on('mouseleave', handleNodeUnhover);
+
+        nodeGroups.append('circle')
+            .attr('r', 0)
+            .attr('fill', d => getNodeColor(d))
+            .attr('stroke', config.colors.commitDefault)
+            .attr('stroke-width', d => d.isSignificant ? 1.5 : 1)
+            .transition()
+            .duration(500)
+            .attr('r', d => d.radius);
+
+        console.log('Logical layout rendered');
+    }
+
+    function renderCalendarLayout(layout) {
+        console.log('Rendering calendar layout...');
+
+        // Group nodes by period (they should already be positioned by backend)
+        // For calendar layout, nodes represent time periods, not individual commits
+        const nodeGroups = g.selectAll('.calendar-node')
+            .data(layout.nodes)
+            .enter()
+            .append('g')
+            .attr('class', 'calendar-node')
+            .attr('transform', d => `translate(${d.x}, ${d.y})`)
+            .on('click', (event, d) => showCalendarNodeDetail(d))
+            .on('mouseenter', handleCalendarNodeHover)
+            .on('mouseleave', handleCalendarNodeUnhover);
+
+        // Render as circles (size proportional to commit count)
+        nodeGroups.append('circle')
+            .attr('r', 0)
+            .attr('fill', '#4a90e2')
+            .attr('stroke', config.colors.commitDefault)
+            .attr('stroke-width', 1.5)
+            .attr('opacity', 0.7)
+            .transition()
+            .duration(500)
+            .attr('r', d => d.radius);
+
+        // Add count labels for significant groups
+        nodeGroups.filter(d => d.radius > 8)
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('font-size', '10px')
+            .attr('font-weight', 'bold')
+            .attr('fill', '#fff')
+            .attr('pointer-events', 'none')
+            .text(d => {
+                // Extract commit count from message (hacky but works for MVP)
+                const match = d.message.match(/(\d+) commits?/);
+                return match ? match[1] : '';
+            })
+            .attr('opacity', 0)
+            .transition()
+            .duration(500)
+            .attr('opacity', 1);
+
+        // Add time axis
+        renderCalendarTimeAxis(layout);
+
+        console.log('Calendar layout rendered');
+    }
+
+    function renderCalendarTimeAxis(layout) {
+        const axisGroup = g.append('g').attr('class', 'calendar-axis');
+
+        // Extract unique time labels from nodes
+        const timeLabels = new Map();
+        layout.nodes.forEach(node => {
+            if (node.message) {
+                // Extract period label (e.g., "2024-04" from message)
+                const match = node.message.match(/^([\d-]+)/);
+                if (match) {
+                    const label = match[1];
+                    if (!timeLabels.has(label)) {
+                        timeLabels.set(label, node.x);
+                    }
+                }
+            }
+        });
+
+        // Draw labels
+        timeLabels.forEach((x, label) => {
+            axisGroup.append('text')
+                .attr('x', x)
+                .attr('y', -20)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '11px')
+                .attr('font-weight', 'bold')
+                .attr('fill', config.colors.commitDefault)
+                .text(label);
+
+            // Draw tick mark
+            axisGroup.append('line')
+                .attr('x1', x)
+                .attr('y1', -10)
+                .attr('x2', x)
+                .attr('y2', layout.height - config.margin.top - config.margin.bottom)
+                .attr('stroke', '#d0d0d0')
+                .attr('stroke-width', 1)
+                .attr('opacity', 0.4);
+        });
+    }
+
+    function showCalendarNodeDetail(node) {
+        // Show period detail
+        if (window.LaniusApp && window.LaniusApp.showCommitDetail) {
+            const commit = {
+                sha: node.commitId || 'calendar-group',
+                author: 'Calendar Group',
+                authorEmail: '',
+                timestamp: node.timestamp,
+                message: node.message || 'Time period group',
+                branches: [node.branchName || 'All branches'],
+                stats: null
+            };
+            window.LaniusApp.showCommitDetail(commit);
+        }
+    }
+
+    function handleCalendarNodeHover(event, d) {
+        const node = d3.select(event.currentTarget);
+
+        node.select('circle')
+            .transition()
+            .duration(200)
+            .ease(d3.easeCubicOut)
+            .attr('r', d.radius * 1.3)
+            .attr('stroke-width', 3);
+
+        // Show tooltip
+        showCalendarNodeTooltip(event, d);
+    }
+
+    function handleCalendarNodeUnhover(event, d) {
+        const node = d3.select(event.currentTarget);
+
+        node.select('circle')
+            .transition()
+            .duration(200)
+            .ease(d3.easeCubicOut)
+            .attr('r', d.radius)
+            .attr('stroke-width', 1.5);
+
+        hideTooltip();
+    }
+
+    function showCalendarNodeTooltip(event, node) {
+        const tooltip = d3.select('body')
+            .append('div')
+            .attr('class', 'tooltip')
+            .style('position', 'absolute')
+            .style('background', '#fafafa')
+            .style('border', '1px solid #1a1a1a')
+            .style('padding', '8px')
+            .style('font-family', 'var(--font-mono)')
+            .style('font-size', '11px')
+            .style('pointer-events', 'none')
+            .style('z-index', '1000')
+            .style('opacity', 0);
+
+        tooltip.html(`
+            <div><strong>${node.message || 'Calendar Group'}</strong></div>
+            <div>${new Date(node.timestamp).toLocaleDateString()}</div>
+        `);
+
+        tooltip
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px')
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
     }
 
     function extractBranchInfo(nodes) {

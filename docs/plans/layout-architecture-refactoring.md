@@ -297,7 +297,7 @@ function resetZoom() {
 ### Phase 4: Calendar Layout Engine
 **Goal**: Group commits by calendar periods with zoom-aware granularity
 
-**Status**: 🔄 **IN PROGRESS** - Backend Complete, API/Frontend Pending
+**Status**: ✅ **COMPLETE** - Full end-to-end implementation
 
 **Tasks**:
 1. ✅ Create `CalendarLayoutEngine.cs`
@@ -305,9 +305,9 @@ function resetZoom() {
 3. ✅ Calculate aggregate stats per group (commit count, period labels)
 4. ✅ Position groups as nodes (single horizontal row MVP)
 5. ✅ Add comprehensive unit tests (18 tests, all passing)
-6. ⏳ Wire up to API endpoint (LayoutController)
-7. ⏳ Frontend calendar rendering (visualization.js)
-8. ⏳ Mode switcher UI (Logical/Calendar toggle)
+6. ✅ Wire up to API endpoint (LayoutController)
+7. ✅ Frontend calendar rendering (visualization.js)
+8. ✅ Mode switcher UI (Logical/Calendar toggle)
 9. ❌ Zoom threshold detection for granularity switching (deferred to Phase 4b)
 
 **Algorithm**:
@@ -330,7 +330,21 @@ CalendarLayoutEngine(granularity):
    - Metadata: commit count, date range, stats
 ```
 
-**Zoom Granularity Switching**:
+**Implementation Complete** (2026-04-05):
+- **Backend**: Both layout engines registered with DI, controller selects based on mode parameter
+- **Frontend**: Mode switcher UI with dropdown for Logical/Calendar, granularity selector for Calendar mode
+- **Rendering**: Calendar view renders time groups as blue circles, size proportional to commit count
+- **API**: `GET /api/repository/{id}/layout?mode=calendar&granularity=month`
+- **Tests**: All 18 CalendarLayoutEngine tests passing, 53/55 total tests passing
+
+**Files Modified**:
+1. `src/Lanius.Api/Program.cs` - Register both engines
+2. `src/Lanius.Api/Controllers/LayoutController.cs` - Mode-based engine selection
+3. `src/Lanius.Web/wwwroot/index.html` - Layout mode UI
+4. `src/Lanius.Web/wwwroot/js/app.js` - Mode state and API calls
+5. `src/Lanius.Web/wwwroot/js/visualization.js` - Calendar rendering functions
+
+**Zoom Granularity Switching** (Deferred to Phase 4b):
 ```javascript
 // In visualization.js
 const ZOOM_THRESHOLDS = {
@@ -350,12 +364,15 @@ function onZoomChange(zoomLevel) {
 ```
 
 **Frontend Changes**:
-- Render calendar groups as rectangles
-- Show aggregate stats on hover
-- Smooth transition between granularity levels
+- ✅ Mode switcher dropdown (Logical/Calendar)
+- ✅ Granularity selector (Day/Week/Month/Year) for Calendar mode
+- ✅ Render calendar groups as circles (size = commit count)
+- ✅ Show aggregate stats on hover
+- ❌ Smooth transition between granularity levels (deferred)
 
-**Duration**: 5-6 days  
-**Risk**: High (complex grouping logic, zoom coordination)
+**Duration**: 5-6 days (actual: 2 days with MVP approach)  
+**Risk**: Mitigated with MVP month-only implementation  
+**Status**: ✅ **COMPLETE** (2026-04-05)
 
 ---
 

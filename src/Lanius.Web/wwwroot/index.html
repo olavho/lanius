@@ -48,6 +48,29 @@
                 </section>
 
                 <section class="control-panel">
+                    <h2 class="panel-title">Layout Mode</h2>
+                    <div class="control-group">
+                        <label class="control-label">Visualization Type</label>
+                        <select id="layout-mode" class="input-field">
+                            <option value="logical" selected>Logical (Branch Lines)</option>
+                            <option value="calendar">Calendar (Time Groups)</option>
+                        </select>
+                    </div>
+                    <div class="control-group" id="granularity-group" style="display: none;">
+                        <label class="control-label">Calendar Granularity</label>
+                        <select id="calendar-granularity" class="input-field">
+                            <option value="day">Day</option>
+                            <option value="week">Week</option>
+                            <option value="month" selected>Month</option>
+                            <option value="year">Year</option>
+                        </select>
+                    </div>
+                    <div class="info-text" id="layout-mode-info">
+                        <small>Shows commits on branch timelines</small>
+                    </div>
+                </section>
+
+                <section class="control-panel">
                     <h2 class="panel-title">Replay Mode</h2>
                     <div class="control-group">
                         <label class="control-label">

@@ -11,6 +11,8 @@ let state = {
     relationships: [], // Add relationships array
     replaySessionId: null,
     replaySpeed: 1.0,
+    layoutMode: 'logical', // Current layout mode
+    calendarGranularity: 'month', // Calendar granularity
     stats: {
         totalCommits: 0,
         totalBranches: 0,
@@ -73,6 +75,35 @@ function initializeEventHandlers() {
         } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
             e.preventDefault();
             Visualization.zoomOut();
+        }
+    });
+
+    // Layout mode switching
+    document.getElementById('layout-mode').addEventListener('change', (e) => {
+        state.layoutMode = e.target.value;
+        const granularityGroup = document.getElementById('granularity-group');
+        const infoText = document.getElementById('layout-mode-info');
+
+        if (state.layoutMode === 'calendar') {
+            granularityGroup.style.display = 'block';
+            infoText.innerHTML = '<small>Groups commits by time periods</small>';
+        } else {
+            granularityGroup.style.display = 'none';
+            infoText.innerHTML = '<small>Shows commits on branch timelines</small>';
+        }
+
+        // Reload layout with new mode if repository is loaded
+        if (state.repositoryId) {
+            loadRepository();
+        }
+    });
+
+    document.getElementById('calendar-granularity').addEventListener('change', (e) => {
+        state.calendarGranularity = e.target.value;
+
+        // Reload layout with new granularity if in calendar mode
+        if (state.repositoryId && state.layoutMode === 'calendar') {
+            loadRepository();
         }
     });
 
@@ -298,10 +329,13 @@ async function loadRepository() {
         console.log('Branch filter input:', `"${branchFilterInput}"`);
         console.log('Has filter:', hasFilter);
 
-        // Use the new layout endpoint
-        let layoutUrl = `${API_URL}/api/repository/${state.repositoryId}/layout?mode=logical`;
+        // Use the new layout endpoint with current mode
+        let layoutUrl = `${API_URL}/api/repository/${state.repositoryId}/layout?mode=${state.layoutMode}`;
         if (hasFilter) {
             layoutUrl += `&branchFilter=${encodeURIComponent(branchFilter)}`;
+        }
+        if (state.layoutMode === 'calendar') {
+            layoutUrl += `&granularity=${state.calendarGranularity}`;
         }
 
         console.log('Fetching layout from:', layoutUrl);

@@ -33,8 +33,17 @@ builder.Services.AddSingleton<IRepositoryService, RepositoryService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
 
-// Register layout engine
-builder.Services.AddScoped<ILayoutEngine, LogicalLayoutEngine>();
+// Register both layout engines
+builder.Services.AddScoped<LogicalLayoutEngine>();
+builder.Services.AddScoped<CalendarLayoutEngine>();
+
+// Register layout engine factory
+builder.Services.AddScoped<ILayoutEngine>(provider =>
+{
+    // Default to LogicalLayoutEngine for DI
+    // Controller will manually resolve the correct engine based on mode
+    return provider.GetRequiredService<LogicalLayoutEngine>();
+});
 
 // ReplayService is singleton but uses IServiceProvider to create scopes for ICommitAnalyzer
 builder.Services.AddSingleton<IReplayService, ReplayService>();

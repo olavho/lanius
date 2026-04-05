@@ -10,7 +10,7 @@ namespace Lanius.Api.Controllers;
 [ApiController]
 [Route("api/repository/{repositoryId}/[controller]")]
 public class LayoutController(
-    ILayoutEngine layoutEngine,
+    IServiceProvider serviceProvider,
     IHubContext<RepositoryHub> hubContext,
     ILogger<LayoutController> logger) : ControllerBase
 {
@@ -33,7 +33,7 @@ public class LayoutController(
     public async Task<ActionResult<LayoutResponse>> GetLayout(
         string repositoryId,
         [FromQuery] LayoutMode mode = LayoutMode.Logical,
-        [FromQuery] CalendarGranularity granularity = CalendarGranularity.Month,
+        [FromQuery] CalendarGranularity? granularity = null,
         [FromQuery] string? branchFilter = null,
         [FromQuery] double canvasWidth = 1200,
         [FromQuery] double canvasHeight = 600,
@@ -52,6 +52,14 @@ public class LayoutController(
                 BranchFilter = branchFilter,
                 CanvasWidth = canvasWidth,
                 CanvasHeight = canvasHeight
+            };
+
+            // Resolve the appropriate layout engine based on mode
+            ILayoutEngine layoutEngine = mode switch
+            {
+                LayoutMode.Logical => serviceProvider.GetRequiredService<LogicalLayoutEngine>(),
+                LayoutMode.Calendar => serviceProvider.GetRequiredService<CalendarLayoutEngine>(),
+                _ => throw new ArgumentException($"Unsupported layout mode: {mode}")
             };
 
             // Create progress reporter that sends updates via SignalR
