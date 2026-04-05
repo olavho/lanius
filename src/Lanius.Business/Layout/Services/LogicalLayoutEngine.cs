@@ -29,10 +29,10 @@ public class LogicalLayoutEngine(
             return CreateEmptyResult(options.Mode);
         }
 
-        progress?.Report(new LayoutProgress(20, $"Loading commits from {branches.Count} branches", 0, 0));
+        progress?.Report(new LayoutProgress(10, $"Found {branches.Count} branches", branches.Count, branches.Count));
 
         // Load all commits for each branch
-        var branchCommits = await LoadAllCommitsAsync(repositoryId, branches, cancellationToken);
+        var branchCommits = await LoadAllCommitsAsync(repositoryId, branches, progress, cancellationToken);
         var allCommits = branchCommits.Values.SelectMany(c => c).DistinctBy(c => c.Sha).ToList();
 
         if (allCommits.Count == 0)
@@ -40,7 +40,7 @@ public class LogicalLayoutEngine(
             return CreateEmptyResult(options.Mode);
         }
 
-        progress?.Report(new LayoutProgress(50, $"Calculating positions for {allCommits.Count} commits", 0, allCommits.Count));
+        progress?.Report(new LayoutProgress(50, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
 
         // Assign Y lanes to branches
         var branchLanes = AssignBranchLanes(branches, options);
@@ -48,12 +48,12 @@ public class LogicalLayoutEngine(
         // Calculate node positions
         var nodes = CalculateNodePositions(allCommits, branchCommits, branchLanes, options);
 
-        progress?.Report(new LayoutProgress(80, "Calculating branch line connections", 0, 0));
+        progress?.Report(new LayoutProgress(80, $"Calculating edges for {nodes.Count} nodes", nodes.Count, nodes.Count));
 
         // Calculate edges (branch lines)
         var edges = CalculateEdges(nodes, branchCommits);
 
-        progress?.Report(new LayoutProgress(100, "Layout complete", allCommits.Count, allCommits.Count));
+        progress?.Report(new LayoutProgress(100, $"Layout complete: {allCommits.Count} commits, {branches.Count} branches", allCommits.Count, allCommits.Count));
 
         // Calculate final dimensions
         var (width, height) = CalculateDimensions(nodes, options);
@@ -89,18 +89,30 @@ public class LogicalLayoutEngine(
     private async Task<Dictionary<string, List<Lanius.Business.Models.Commit>>> LoadAllCommitsAsync(
         string repositoryId,
         List<Lanius.Business.Models.Branch> branches,
+        IProgress<LayoutProgress>? progress,
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
+        int processedBranches = 0;
+        int totalBranches = branches.Count;
 
         foreach (var branch in branches)
         {
+            // Report progress BEFORE loading (so user knows we're working on this branch)
+            int percentage = 10 + (int)((processedBranches / (double)totalBranches) * 40);
+            progress?.Report(new LayoutProgress(
+                percentage,
+                $"Loading commits: {branch.Name} ({processedBranches + 1}/{totalBranches})",
+                processedBranches,
+                totalBranches));
+
             var commits = await commitAnalyzer.GetCommitsAsync(
                 repositoryId,
                 branch.Name,
                 cancellationToken);
 
             result[branch.Name] = [.. commits];
+            processedBranches++;
         }
 
         return result;

@@ -1,7 +1,9 @@
 using Lanius.Api.DTOs;
+using Lanius.Api.Hubs;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace Lanius.Api.Controllers;
 
@@ -9,6 +11,7 @@ namespace Lanius.Api.Controllers;
 [Route("api/repository/{repositoryId}/[controller]")]
 public class LayoutController(
     ILayoutEngine layoutEngine,
+    IHubContext<RepositoryHub> hubContext,
     ILogger<LayoutController> logger) : ControllerBase
 {
     /// <summary>
@@ -51,10 +54,23 @@ public class LayoutController(
                 CanvasHeight = canvasHeight
             };
 
+            // Create progress reporter that sends updates via SignalR
+            var progress = new Progress<LayoutProgress>(p =>
+            {
+                hubContext.Clients.Group($"repo:{repositoryId}")
+                    .SendAsync("LayoutProgress", new
+                    {
+                        percentage = p.Percentage,
+                        operation = p.Operation,
+                        processedItems = p.ProcessedItems,
+                        totalItems = p.TotalItems
+                    }, cancellationToken);
+            });
+
             var result = await layoutEngine.CalculateLayoutAsync(
                 repositoryId,
                 options,
-                progress: null, // TODO: Add SignalR progress reporting
+                progress: progress,
                 cancellationToken);
 
             var response = new LayoutResponse

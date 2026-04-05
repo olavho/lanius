@@ -69,6 +69,7 @@ async function initializeSignalR() {
     state.connection.on('ReplayCommit', handleReplayCommit);
     state.connection.on('ReplayCompleted', handleReplayCompleted);
     state.connection.on('ReplayError', handleReplayError);
+    state.connection.on('LayoutProgress', handleLayoutProgress);
 
     try {
         await state.connection.start();
@@ -258,6 +259,11 @@ async function loadRepository() {
 
     try {
         updateStatus('repo-status', 'Loading repository layout...');
+
+        // Subscribe to repository progress updates via SignalR
+        if (state.connection && state.connection.state === signalR.HubConnectionState.Connected) {
+            await state.connection.invoke('SubscribeToRepository', state.repositoryId);
+        }
 
         // Get branch filter patterns
         const branchFilterInput = document.getElementById('branch-pattern').value;
@@ -516,6 +522,22 @@ function handleReplayError(error) {
     console.error('Replay error:', error);
     updateStatus('replay-status', `Error: ${error.message}`, true);
     setReplayButtonState(false);
+}
+
+function handleLayoutProgress(progress) {
+    console.log('Layout progress:', progress);
+
+    const { percentage, operation, processedItems, totalItems } = progress;
+
+    // Build progress message
+    let message = operation;
+    if (totalItems > 0) {
+        message = `${operation}: ${processedItems}/${totalItems} (${percentage}%)`;
+    } else {
+        message = `${operation} (${percentage}%)`;
+    }
+
+    updateStatus('repo-status', message);
 }
 
 // UI Helper Functions

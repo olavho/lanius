@@ -3,11 +3,16 @@ using Lanius.Api.Services;
 using Lanius.Business.Configuration;
 using Lanius.Business.Layout.Services;
 using Lanius.Business.Services;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();

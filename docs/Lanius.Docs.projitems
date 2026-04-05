@@ -57,6 +57,8 @@
     <None Include="$(MSBuildThisFileDirectory)chat\2025-11-16-16-fix-indicator-box-transition.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-02-layout-phase-2-backend-complete.md" />
     <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-03-layout-phase-2-complete.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-04-layout-progress-reporting.md" />
+    <None Include="$(MSBuildThisFileDirectory)chat\2026-04-05-05-layout-progress-granular-fix.md" />
     <None Include="$(MSBuildThisFileDirectory)clarifications-needed.md" />
     <None Include="$(MSBuildThisFileDirectory)mvp-implementation-summary.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\2025.11.16-InitialPlan.md" />
