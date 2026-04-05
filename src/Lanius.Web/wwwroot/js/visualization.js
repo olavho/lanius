@@ -2,9 +2,10 @@
 // Thin black/dark gray lines on light background, smooth animations
 
 const Visualization = (() => {
-    let svg, g, xScale, yScale;
+    let svg, g, xScale, yScale, zoomBehavior;
     let commitData = [];
     let branchData = [];
+    let currentZoom = d3.zoomIdentity; // Preserve zoom state across re-renders
 
     const config = {
         margin: { top: 60, right: 40, bottom: 40, left: 100 },
@@ -12,6 +13,7 @@ const Visualization = (() => {
         commitRadiusHover: 6,
         lineWidth: 1,
         branchSpacing: 40,
+        zoomExtent: [0.1, 10], // 10% to 1000% zoom
         colors: {
             commitDefault: '#1a1a1a',
             commitAdditions: '#2d2d2d',
@@ -40,6 +42,17 @@ const Visualization = (() => {
 
         yScale = d3.scaleLinear()
             .range([0, height - config.margin.top - config.margin.bottom]);
+
+        // Initialize zoom behavior
+        zoomBehavior = d3.zoom()
+            .scaleExtent(config.zoomExtent)
+            .on('zoom', (event) => {
+                currentZoom = event.transform;
+                g.attr('transform', event.transform);
+            });
+
+        // Apply zoom behavior to SVG
+        svg.call(zoomBehavior);
 
         // Handle window resize
         window.addEventListener('resize', debounce(handleResize, 250));
@@ -747,6 +760,11 @@ const Visualization = (() => {
                 .duration(500)
                 .attr('r', d => d.radius);
 
+            // Restore zoom state after rendering
+            if (currentZoom && currentZoom.k !== 1) {
+                g.attr('transform', currentZoom);
+            }
+
             console.log('=== renderLayout COMPLETE ===');
         } catch (error) {
             console.error('Error rendering layout:', error);
@@ -888,13 +906,41 @@ const Visualization = (() => {
             .style('opacity', 1);
     }
 
+    // Zoom control functions
+    function resetZoom() {
+        if (svg && zoomBehavior) {
+            svg.transition()
+                .duration(750)
+                .call(zoomBehavior.transform, d3.zoomIdentity);
+        }
+    }
+
+    function zoomIn() {
+        if (svg && zoomBehavior) {
+            svg.transition()
+                .duration(300)
+                .call(zoomBehavior.scaleBy, 1.3);
+        }
+    }
+
+    function zoomOut() {
+        if (svg && zoomBehavior) {
+            svg.transition()
+                .duration(300)
+                .call(zoomBehavior.scaleBy, 0.7);
+        }
+    }
+
     return {
         initialize,
         render,
         renderLayout,
         animateNewCommit,
         animateReplayCommit,
-        clear: clearAll
+        clear: clearAll,
+        resetZoom,
+        zoomIn,
+        zoomOut
     };
 })();
 

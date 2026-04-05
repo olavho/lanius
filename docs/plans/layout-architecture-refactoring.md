@@ -214,14 +214,35 @@ Lanius.Business/
 ### Phase 3: Canvas Zoom and Pan
 **Goal**: Enable zoom/pan navigation for large graphs
 
-**Status**: ❌ **NOT STARTED**
+**Status**: ✅ **COMPLETE**
 
 **Tasks**:
-1. ❌ Add D3 zoom behavior to SVG canvas
-2. ❌ Bind zoom to `g` transform (existing group)
-3. ❌ Add zoom controls (buttons or mouse wheel)
-4. ❌ Add pan controls (drag or scrollbars)
-5. ❌ Preserve zoom/pan state during re-renders
+1. ✅ Add D3 zoom behavior to SVG canvas
+2. ✅ Bind zoom to `g` transform (existing group)
+3. ✅ Add zoom controls (buttons and mouse wheel)
+4. ✅ Add pan controls (click + drag)
+5. ✅ Preserve zoom/pan state during re-renders
+6. ✅ Add keyboard shortcuts (Ctrl+0/=/-)
+
+**Implementation Details**:
+- **Zoom behavior**: D3 zoom with scale extent [0.1, 10] (10% to 1000%)
+- **Mouse wheel**: Zoom in/out at cursor position
+- **Click + drag**: Pan the graph
+- **Buttons**: Zoom In, Zoom Out, Reset Zoom
+- **Keyboard shortcuts**: 
+  - Ctrl+0: Reset zoom
+  - Ctrl+=: Zoom in
+  - Ctrl+-: Zoom out
+- **State preservation**: `currentZoom` saved and restored across re-renders
+
+**Files Modified**:
+- `src/Lanius.Web/wwwroot/js/visualization.js` - Added zoom behavior, control functions
+- `src/Lanius.Web/wwwroot/index.html` - Added zoom control buttons UI
+- `src/Lanius.Web/wwwroot/js/app.js` - Added event handlers for buttons and keyboard
+
+**Duration**: 1 hour (actual)  
+**Risk**: Low (D3 built-in feature)  
+**Implementation Date**: 2026-04-05
 
 **Implementation**:
 ```javascript

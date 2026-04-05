@@ -51,6 +51,31 @@ function initializeEventHandlers() {
     document.getElementById('monitor-start').addEventListener('click', startMonitoring);
     document.getElementById('monitor-stop').addEventListener('click', stopMonitoring);
 
+    // Zoom controls
+    document.getElementById('zoom-in').addEventListener('click', () => {
+        Visualization.zoomIn();
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+        Visualization.zoomOut();
+    });
+    document.getElementById('zoom-reset').addEventListener('click', () => {
+        Visualization.resetZoom();
+    });
+
+    // Keyboard shortcuts for zoom
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+            e.preventDefault();
+            Visualization.resetZoom();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+            e.preventDefault();
+            Visualization.zoomIn();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+            e.preventDefault();
+            Visualization.zoomOut();
+        }
+    });
+
     // Commit detail close
     document.querySelector('.detail-close').addEventListener('click', hideCommitDetail);
 }
