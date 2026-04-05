@@ -380,7 +380,7 @@ async function loadRepository() {
         renderVisualization();
 
         hideLayoutProgress();
-        updateCanvasInfo
+        updateCanvasInfo(`${layout.totalCommits} commits (${layout.totalBranches} branches)`);
         updateStatus('repo-status', `Loaded layout: ${layout.totalCommits} commits, ${layout.totalBranches} branches`);
 
     } catch (err) {

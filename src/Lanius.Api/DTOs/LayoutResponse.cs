@@ -94,6 +94,11 @@ public class LayoutNodeDto
     public string? Message { get; init; }
 
     /// <summary>
+    /// Commit author name.
+    /// </summary>
+    public string? Author { get; init; }
+
+    /// <summary>
     /// Whether this is a significant commit (merge, tag, etc.).
     /// </summary>
     public bool IsSignificant { get; init; }

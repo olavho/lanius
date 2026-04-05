@@ -2,6 +2,7 @@ using Lanius.Api.DTOs;
 using Lanius.Api.Hubs;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 
@@ -65,19 +66,11 @@ public class LayoutController(
             // Collect in-flight SignalR sends so they can be awaited before the HTTP
             // response is sent. Without this, fire-and-forget sends may arrive after
             // the frontend calls hideLayoutProgress() on the HTTP response.
-            var progressTasks = new System.Collections.Concurrent.ConcurrentBag<Task>();
-            var progress = new Progress<LayoutProgress>(p =>
-            {
-                var task = hubContext.Clients.Group($"repo:{repositoryId}")
-                    .SendAsync("LayoutProgress", new
-                    {
-                        percentage = p.Percentage,
-                        operation = p.Operation,
-                        processedItems = p.ProcessedItems,
-                        totalItems = p.TotalItems
-                    }, CancellationToken.None);
-                progressTasks.Add(task);
-            });
+            var progressTasks = new ConcurrentBag<Task>();
+            IProgress<LayoutProgress> progress = new LayoutProgressReporter(
+                hubContext,
+                repositoryId,
+                progressTasks);
 
             var result = await layoutEngine.CalculateLayoutAsync(
                 repositoryId,
@@ -100,6 +93,7 @@ public class LayoutController(
                     BranchName = n.BranchName,
                     Timestamp = n.Timestamp,
                     Message = n.Message,
+                    Author = n.Author,
                     IsSignificant = n.IsSignificant
                 })],
                 Edges = [.. result.Edges.Select(e => new LayoutEdgeDto
@@ -124,6 +118,17 @@ public class LayoutController(
 
             return Ok(response);
         }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "Repository not found for layout request {RepositoryId}", repositoryId);
+            return NotFound(new ErrorResponse
+            {
+                Error = "RepositoryNotFound",
+                Message = ex.Message,
+                Detail = "Repository not found",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        }
         catch (ArgumentException ex)
         {
             logger.LogWarning(ex, "Invalid layout request for repository {RepositoryId}", repositoryId);
@@ -145,6 +150,29 @@ public class LayoutController(
                 Detail = ex.Message,
                 Timestamp = DateTimeOffset.UtcNow
             });
+        }
+    }
+
+    /// <summary>
+    /// Synchronous progress reporter that records SignalR send tasks deterministically.
+    /// </summary>
+    private sealed class LayoutProgressReporter(
+        IHubContext<RepositoryHub> hubContext,
+        string repositoryId,
+        ConcurrentBag<Task> progressTasks) : IProgress<LayoutProgress>
+    {
+        public void Report(LayoutProgress progress)
+        {
+            var task = hubContext.Clients.Group($"repo:{repositoryId}")
+                .SendAsync("LayoutProgress", new
+                {
+                    percentage = progress.Percentage,
+                    operation = progress.Operation,
+                    processedItems = progress.ProcessedItems,
+                    totalItems = progress.TotalItems
+                }, CancellationToken.None);
+
+            progressTasks.Add(task);
         }
     }
 }

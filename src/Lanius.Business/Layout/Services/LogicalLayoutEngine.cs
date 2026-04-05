@@ -83,16 +83,24 @@ public class LogicalLayoutEngine(
         string? branchFilter,
         CancellationToken cancellationToken)
     {
-        List<Branch> branches;
+        // Always load all branches first so filtering can normalize names consistently
+        // (e.g. pattern "main" should match remote "origin/main").
+        var allBranches = (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken)).ToList();
 
+        List<Branch> branches;
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
-            branches = [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken))];
+            branches = allBranches;
         }
         else
         {
             var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            branches = [.. (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken))];
+            branches =
+            [
+                .. allBranches.Where(b =>
+                    MatchesAnyPattern(NormalizeBranchName(b.Name), patterns) ||
+                    MatchesAnyPattern(b.Name, patterns))
+            ];
         }
 
         // Filter to origin/* branches only to avoid duplicate processing
@@ -248,10 +256,11 @@ public class LogicalLayoutEngine(
 
         foreach (var commit in sortedCommits)
         {
-            // Find primary branch (prefer main/master, or first alphabetically)
+            // Find primary branch (prefer main/master, including origin/main|origin/master)
             var commitBranches = commitToBranches.GetValueOrDefault(commit.Sha, []);
             var primaryBranch = commitBranches.OrderBy(b =>
-                b == "main" ? 0 : b == "master" ? 1 : 2)
+                NormalizeBranchName(b) == "main" ? 0 :
+                NormalizeBranchName(b) == "master" ? 1 : 2)
                 .ThenBy(b => b)
                 .FirstOrDefault() ?? "unknown";
 
@@ -412,5 +421,45 @@ public class LogicalLayoutEngine(
             TotalCommits = 0,
             TotalBranches = 0
         };
+    }
+
+    private static string NormalizeBranchName(string branchName)
+    {
+        const string remotePrefix = "origin/";
+        return branchName.StartsWith(remotePrefix, StringComparison.OrdinalIgnoreCase)
+            ? branchName[remotePrefix.Length..]
+            : branchName;
+    }
+
+    private static bool MatchesAnyPattern(string branchName, IEnumerable<string> patterns)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (MatchesPattern(branchName, pattern))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool MatchesPattern(string branchName, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        if (pattern == "*")
+            return true;
+
+        if (pattern.Contains('*'))
+        {
+            var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
+                .Replace("\\*", ".*") + "$";
+            return System.Text.RegularExpressions.Regex.IsMatch(
+                branchName,
+                regexPattern,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        return branchName.Equals(pattern, StringComparison.OrdinalIgnoreCase);
     }
 }
