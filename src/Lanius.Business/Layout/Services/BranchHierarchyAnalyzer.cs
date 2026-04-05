@@ -208,8 +208,10 @@ public class BranchHierarchyAnalyzer(
     /// </summary>
     private static BranchTier GetBranchTier(string branchName)
     {
-        // Normalize branch name (remove origin/ prefix)
-        var normalized = branchName.Replace("origin/", "");
+        // Normalize branch name (remove leading origin/ prefix only)
+        var normalized = branchName.StartsWith("origin/", StringComparison.OrdinalIgnoreCase)
+            ? branchName["origin/".Length..]
+            : branchName;
 
         return normalized switch
         {
