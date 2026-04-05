@@ -1,7 +1,8 @@
 using Lanius.Api.DTOs;
 using Lanius.Api.Hubs;
+using Lanius.Business.Analysis.Services;
 using Lanius.Business.Configuration;
-using Lanius.Business.Services;
+using Lanius.Business.Storage.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 
@@ -113,7 +114,7 @@ public class RepositoryMonitoringService(
     private async Task CheckRepositoryForUpdates(string repositoryId, CancellationToken cancellationToken)
     {
         using var scope = serviceProvider.CreateScope();
-        var repositoryService = scope.ServiceProvider.GetRequiredService<IRepositoryService>();
+        var repositoryService = scope.ServiceProvider.GetRequiredService<IRepositoryStorageService>();
         var commitAnalyzer = scope.ServiceProvider.GetRequiredService<ICommitAnalyzer>();
 
         // Fetch latest changes from remote

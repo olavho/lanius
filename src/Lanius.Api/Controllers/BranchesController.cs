@@ -1,5 +1,6 @@
 using Lanius.Api.DTOs;
-using Lanius.Business.Services;
+using Lanius.Business.Analysis.Models;
+using Lanius.Business.Analysis.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lanius.Api.Controllers;
@@ -32,7 +33,7 @@ public class BranchesController(
         {
             logger.LogInformation("Getting branches for repository: {Id}", repositoryId);
 
-            IReadOnlyList<Business.Models.Branch> branches;
+            IReadOnlyList<Branch> branches;
 
             if (patterns != null && patterns.Length > 0)
             {
@@ -240,7 +241,7 @@ public class BranchesController(
                 repositoryId, patterns != null ? string.Join(", ", patterns) : "none", includeRemote);
 
             // Get filtered branches
-            IReadOnlyList<Business.Models.Branch> branches;
+            IReadOnlyList<Branch> branches;
             if (patterns != null && patterns.Length > 0)
             {
                 logger.LogInformation("Using pattern-based filtering with {Count} patterns", patterns.Length);
@@ -302,9 +303,9 @@ public class BranchesController(
                 Branches = c.Branches,
                 Type = c.Significance switch
                 {
-                    Business.Models.CommitSignificance.BranchHead => SignificantCommitType.BranchHead,
-                    Business.Models.CommitSignificance.MergeBase => SignificantCommitType.MergeBase,
-                    Business.Models.CommitSignificance.Both => SignificantCommitType.Both,
+                    Business.Analysis.Models.CommitSignificance.BranchHead => SignificantCommitType.BranchHead,
+                    Business.Analysis.Models.CommitSignificance.MergeBase => SignificantCommitType.MergeBase,
+                    Business.Analysis.Models.CommitSignificance.Both => SignificantCommitType.Both,
                     _ => SignificantCommitType.BranchHead
                 },
                 Stats = c.Stats != null ? new DiffStatsResponse

@@ -1,6 +1,6 @@
 using Lanius.Api.DTOs;
-using Lanius.Business.Models;
-using Lanius.Business.Services;
+using Lanius.Business.Replay.Models;
+using Lanius.Business.Replay.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Lanius.Api.Controllers;

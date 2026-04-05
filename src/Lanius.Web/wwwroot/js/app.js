@@ -11,6 +11,8 @@ let state = {
     relationships: [], // Add relationships array
     replaySessionId: null,
     replaySpeed: 1.0,
+    layoutMode: 'logical', // Current layout mode
+    calendarGranularity: 'month', // Calendar granularity
     stats: {
         totalCommits: 0,
         totalBranches: 0,
@@ -51,6 +53,60 @@ function initializeEventHandlers() {
     document.getElementById('monitor-start').addEventListener('click', startMonitoring);
     document.getElementById('monitor-stop').addEventListener('click', stopMonitoring);
 
+    // Zoom controls
+    document.getElementById('zoom-in').addEventListener('click', () => {
+        Visualization.zoomIn();
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+        Visualization.zoomOut();
+    });
+    document.getElementById('zoom-reset').addEventListener('click', () => {
+        Visualization.resetZoom();
+    });
+
+    // Keyboard shortcuts for zoom
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+            e.preventDefault();
+            Visualization.resetZoom();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === '=') {
+            e.preventDefault();
+            Visualization.zoomIn();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+            e.preventDefault();
+            Visualization.zoomOut();
+        }
+    });
+
+    // Layout mode switching
+    document.getElementById('layout-mode').addEventListener('change', (e) => {
+        state.layoutMode = e.target.value;
+        const granularityGroup = document.getElementById('granularity-group');
+        const infoText = document.getElementById('layout-mode-info');
+
+        if (state.layoutMode === 'calendar') {
+            granularityGroup.style.display = 'block';
+            infoText.innerHTML = '<small>Groups commits by time periods</small>';
+        } else {
+            granularityGroup.style.display = 'none';
+            infoText.innerHTML = '<small>Shows commits on branch timelines</small>';
+        }
+
+        // Reload layout with new mode if repository is loaded
+        if (state.repositoryId) {
+            loadRepository();
+        }
+    });
+
+    document.getElementById('calendar-granularity').addEventListener('change', (e) => {
+        state.calendarGranularity = e.target.value;
+
+        // Reload layout with new granularity if in calendar mode
+        if (state.repositoryId && state.layoutMode === 'calendar') {
+            loadRepository();
+        }
+    });
+
     // Commit detail close
     document.querySelector('.detail-close').addEventListener('click', hideCommitDetail);
 }
@@ -69,6 +125,7 @@ async function initializeSignalR() {
     state.connection.on('ReplayCommit', handleReplayCommit);
     state.connection.on('ReplayCompleted', handleReplayCompleted);
     state.connection.on('ReplayError', handleReplayError);
+    state.connection.on('LayoutProgress', handleLayoutProgress);
 
     try {
         await state.connection.start();
@@ -136,24 +193,32 @@ async function cloneRepository() {
 // Load existing repositories into dropdown
 async function loadExistingRepositories() {
     try {
+        const select = document.getElementById('repo-select');
+
+        // Show loading state
+        select.innerHTML = '<option value="">Loading repositories...</option>';
+        select.disabled = true;
+
         const response = await fetch(`${API_URL}/api/repository`);
 
         if (!response.ok) {
             console.warn('Failed to load existing repositories');
+            select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+            select.disabled = false;
             return;
         }
 
         const repositories = await response.json();
-        const select = document.getElementById('repo-select');
 
-        // Clear existing options except the first one
+        // Clear and re-enable select
         select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+        select.disabled = false;
 
-        // Add repositories to dropdown
+        // Add repositories to dropdown (without commit count for performance)
         repositories.forEach(repo => {
             const option = document.createElement('option');
             option.value = repo.id;
-            option.textContent = `${repo.url} (${repo.totalCommits} commits)`;
+            option.textContent = repo.url;
             option.dataset.url = repo.url;
             select.appendChild(option);
         });
@@ -161,6 +226,9 @@ async function loadExistingRepositories() {
         console.log(`Loaded ${repositories.length} existing repositories`);
     } catch (err) {
         console.error('Error loading existing repositories:', err);
+        const select = document.getElementById('repo-select');
+        select.innerHTML = '<option value="">-- Select or enter new URL --</option>';
+        select.disabled = false;
     }
 }
 
@@ -246,9 +314,15 @@ async function loadRepository() {
     if (!state.repositoryId) return;
 
     try {
-        updateStatus('repo-status', 'Loading branch overview...');
+        updateStatus('repo-status', 'Loading repository layout...');
+        showLayoutProgress('Loading commits...');
 
-        // Get branch filter patterns - handle empty/whitespace properly
+        // Subscribe to repository progress updates via SignalR
+        if (state.connection && state.connection.state === signalR.HubConnectionState.Connected) {
+            await state.connection.invoke('SubscribeToRepository', state.repositoryId);
+        }
+
+        // Get branch filter patterns
         const branchFilterInput = document.getElementById('branch-pattern').value;
         const branchFilter = branchFilterInput ? branchFilterInput.trim() : '';
         const hasFilter = branchFilter.length > 0;
@@ -256,90 +330,62 @@ async function loadRepository() {
         console.log('Branch filter input:', `"${branchFilterInput}"`);
         console.log('Has filter:', hasFilter);
 
-        // Use the new overview endpoint that returns only significant commits
-        // Note: includeRemote defaults to true on the server
-        let overviewUrl = `${API_URL}/api/repositories/${state.repositoryId}/branches/overview`;
+        // Use the new layout endpoint with current mode
+        let layoutUrl = `${API_URL}/api/repository/${state.repositoryId}/layout?mode=${state.layoutMode}`;
         if (hasFilter) {
-            const patterns = branchFilter.split(',').map(p => p.trim()).filter(p => p.length > 0);
-            console.log('Parsed patterns:', patterns);
-            if (patterns.length > 0) {
-                const queryParams = patterns.map(p => `patterns=${encodeURIComponent(p)}`).join('&');
-                overviewUrl += `?${queryParams}`;
-            }
+            layoutUrl += `&branchFilter=${encodeURIComponent(branchFilter)}`;
+        }
+        if (state.layoutMode === 'calendar') {
+            layoutUrl += `&granularity=${state.calendarGranularity}`;
         }
 
-        console.log('Fetching branch overview from:', overviewUrl);
-        const overviewResponse = await fetch(overviewUrl);
-        if (!overviewResponse.ok) {
-            const errorText = await overviewResponse.text();
+        console.log('Fetching layout from:', layoutUrl);
+        const layoutResponse = await fetch(layoutUrl);
+        if (!layoutResponse.ok) {
+            const errorText = await layoutResponse.text();
             console.error('API Error Response:', errorText);
-            throw new Error(`Failed to load branch overview: ${overviewResponse.statusText}`);
+            throw new Error(`Failed to load layout: ${layoutResponse.statusText}`);
         }
 
-        const overview = await overviewResponse.json();
-        console.log('=== BRANCH OVERVIEW LOADED ===');
-        console.log('Full response keys:', Object.keys(overview));
-        console.log('- Branches:', overview.branches.length, 'First 5:', overview.branches.slice(0, 5).map(b => b.name));
-        console.log('- Significant commits:', overview.significantCommits.length);
-        console.log('- Relationships:', overview.relationships.length);
+        const layout = await layoutResponse.json();
+        console.log('=== LAYOUT LOADED ===');
+        console.log('Mode:', layout.mode);
+        console.log('Nodes:', layout.nodes.length);
+        console.log('Edges:', layout.edges.length);
+        console.log('Dimensions:', layout.width, 'x', layout.height);
+        console.log('Total commits:', layout.totalCommits);
+        console.log('Total branches:', layout.totalBranches);
 
-        // Extract branches and commits from overview
-        state.branches = overview.branches.map(b => ({
-            name: b.name,
-            tipSha: b.headSha,
-            timestamp: b.headTimestamp
-        }));
-
-        state.commits = overview.significantCommits.map(c => ({
-            sha: c.sha,
-            author: c.author,
-            authorEmail: '', // Not included in overview
-            timestamp: c.timestamp,
-            message: c.shortMessage,
-            shortMessage: c.shortMessage,
-            parentShas: [], // We don't need parent relationships for overview
-            isMerge: false,
-            stats: c.stats,
-            branches: c.branches,
-            significance: c.type // Store the significance type
-        }));
-
-        // Store relationships for visualization
-        state.relationships = overview.relationships || [];
-
-        console.log(`Loaded ${state.branches.length} branches and ${state.commits.length} significant commits`);
-        console.log('Relationships:', state.relationships);
+        // Store layout data in state
+        state.layoutData = layout;
+        state.branches = []; // Extract unique branches from nodes
+        const branchSet = new Set();
+        layout.nodes.forEach(node => {
+            branchSet.add(node.branchName);
+        });
+        branchSet.forEach(branchName => {
+            state.branches.push({ name: branchName });
+        });
 
         // Check if we have data to render
-        if (state.commits.length === 0) {
+        if (layout.nodes.length === 0) {
             updateStatus('repo-status', 'No commits found', true);
             updateCanvasInfo('No commits to display');
             clearVisualization();
             return;
         }
 
-        if (state.branches.length === 0) {
-            updateStatus('repo-status', 'No branches found matching filter', true);
-            updateCanvasInfo('No branches to display');
-            clearVisualization();
-            return;
-        }
-
-        // Render visualization
-        console.log('Calling renderVisualization with', state.commits.length, 'commits and', state.branches.length, 'branches');
+        // Render visualization with new layout data
+        console.log('Calling renderVisualization with layout data');
         renderVisualization();
 
-        const commitTypeBreakdown = overview.significantCommits.reduce((acc, c) => {
-            acc[c.type] = (acc[c.type] || 0) + 1;
-            return acc;
-        }, {});
-        console.log('Commit types:', commitTypeBreakdown);
-
-        updateCanvasInfo(`${state.commits.length} significant commits (${state.branches.length} branches)`);
-        updateStatus('repo-status', `Loaded overview: ${state.commits.length} commits, ${state.branches.length} branches`);
+        hideLayoutProgress();
+        updateCanvasInfo(`${layout.totalCommits} commits (${layout.totalBranches} branches)`);
+        updateStatus('repo-status', `Loaded layout: ${layout.totalCommits} commits, ${layout.totalBranches} branches`);
 
     } catch (err) {
         console.error('Load error:', err);
+        hideLayoutProgress();
         updateStatus('repo-status', `Error: ${err.message}`, true);
     }
 }
@@ -538,6 +584,39 @@ function handleReplayError(error) {
     console.error('Replay error:', error);
     updateStatus('replay-status', `Error: ${error.message}`, true);
     setReplayButtonState(false);
+}
+
+function handleLayoutProgress(progress) {
+    console.log('Layout progress:', progress);
+
+    const { percentage, operation, processedItems, totalItems } = progress;
+
+    const label = totalItems > 0
+        ? `${operation} — ${processedItems}/${totalItems}`
+        : operation;
+
+    updateLayoutProgress(percentage, label);
+    updateStatus('repo-status', `${label} (${percentage}%)`);
+
+    if (percentage >= 100) {
+        setTimeout(hideLayoutProgress, 400);
+    }
+}
+
+// Layout Progress Bar
+function showLayoutProgress(initialLabel = '') {
+    document.getElementById('layout-progress-fill').style.width = '0%';
+    document.getElementById('layout-progress-label').textContent = initialLabel;
+    document.getElementById('layout-progress').classList.remove('hidden');
+}
+
+function updateLayoutProgress(percentage, label) {
+    document.getElementById('layout-progress-fill').style.width = `${percentage}%`;
+    document.getElementById('layout-progress-label').textContent = label;
+}
+
+function hideLayoutProgress() {
+    document.getElementById('layout-progress').classList.add('hidden');
 }
 
 // UI Helper Functions

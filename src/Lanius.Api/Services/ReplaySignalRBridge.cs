@@ -1,7 +1,7 @@
 using System.Reactive.Linq;
 using Lanius.Api.DTOs;
 using Lanius.Api.Hubs;
-using Lanius.Business.Services;
+using Lanius.Business.Replay.Services;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Lanius.Api.Services;
