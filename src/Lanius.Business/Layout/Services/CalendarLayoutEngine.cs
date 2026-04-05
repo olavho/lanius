@@ -296,15 +296,3 @@ public class CalendarLayoutEngine(
         };
     }
 }
-
-/// <summary>
-/// Represents a time period group of commits.
-/// Public model for calendar layout calculations (exposed for testing).
-/// </summary>
-public record PeriodGroup
-{
-    public required DateTimeOffset PeriodStart { get; init; }
-    public required DateTimeOffset PeriodEnd { get; init; }
-    public required int CommitCount { get; init; }
-    public required List<string> CommitIds { get; init; }
-}
