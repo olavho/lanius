@@ -81,13 +81,30 @@ public class LogicalLayoutEngine(
         string? branchFilter,
         CancellationToken cancellationToken)
     {
+        List<Lanius.Business.Models.Branch> branches;
+
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
-            return [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken))];
+            branches = [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken))];
+        }
+        else
+        {
+            var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            branches = [.. (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken))];
         }
 
-        var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return [.. (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken))];
+        // Filter to origin/* branches only to avoid duplicate processing
+        // (local tracking branches like 'main' are duplicates of 'origin/main')
+        var remoteBranches = branches
+            .Where(b => b.IsRemote && b.Name.StartsWith("origin/"))
+            .ToList();
+
+        _logger.LogInformation(
+            "Loaded {TotalBranches} branches, filtered to {RemoteBranches} origin/* branches",
+            branches.Count,
+            remoteBranches.Count);
+
+        return remoteBranches;
     }
 
     private async Task<Dictionary<string, List<Lanius.Business.Models.Commit>>> LoadAllCommitsAsync(
@@ -123,48 +140,72 @@ public class LogicalLayoutEngine(
         _logger.LogInformation("Branch hierarchy analysis complete. Loading commits per branch...");
 
         // Phase 2: Load commits per branch (20-60% of progress)
-        var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
-        int processedBranches = 0;
-        int totalBranches = hierarchyInfo.Count;
-
-        foreach (var branchInfo in hierarchyInfo)
+        // CRITICAL OPTIMIZATION: Open repository ONCE and reuse for all branches
+        return await Task.Run(() =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            var repoOpenStart = DateTimeOffset.UtcNow;
 
-            // Report progress BEFORE loading
-            int percentage = 20 + (int)((processedBranches / (double)totalBranches) * 40);
-            progress?.Report(new LayoutProgress(
-                percentage,
-                $"Loading commits: {branchInfo.Name} ({processedBranches + 1}/{totalBranches})",
-                processedBranches,
-                totalBranches));
+            // Get repository info
+            var repoInfo = repositoryService.GetRepositoryInfoAsync(repositoryId).GetAwaiter().GetResult();
+            if (repoInfo == null)
+            {
+                throw new InvalidOperationException($"Repository not found: {repositoryId}");
+            }
 
-            _logger.LogDebug("Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
-                branchInfo.Name,
-                branchInfo.Tier,
-                branchInfo.MergeBaseSha?[..8] ?? "none",
-                branchInfo.CommitCount);
+            using var repo = new LibGit2Sharp.Repository(repoInfo.LocalPath);
 
-            // Use optimized loading: only commits since merge base
-            var commits = await commitAnalyzer.GetCommitsSinceAsync(
-                repositoryId,
-                branchInfo.Name,
-                branchInfo.MergeBaseSha, // null for main branch (loads all)
-                cancellationToken);
+            var repoOpenElapsed = (DateTimeOffset.UtcNow - repoOpenStart).TotalMilliseconds;
+            _logger.LogInformation("Opened repository once for all {BranchCount} branches in {OpenTimeMs:F0}ms",
+                hierarchyInfo.Count, repoOpenElapsed);
 
-            result[branchInfo.Name] = [.. commits];
+            var result = new Dictionary<string, List<Lanius.Business.Models.Commit>>();
+            int processedBranches = 0;
+            int totalBranches = hierarchyInfo.Count;
 
-            _logger.LogDebug("Loaded {ActualCommits} commits for branch {BranchName}",
-                commits.Count,
-                branchInfo.Name);
+            foreach (var branchInfo in hierarchyInfo)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-            processedBranches++;
-        }
+                // Report progress BEFORE loading
+                int percentage = 20 + (int)((processedBranches / (double)totalBranches) * 40);
+                progress?.Report(new LayoutProgress(
+                    percentage,
+                    $"Loading commits: {branchInfo.Name} ({processedBranches + 1}/{totalBranches})",
+                    processedBranches,
+                    totalBranches));
 
-        var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
-        _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);
+                var loadStartTime = DateTimeOffset.UtcNow;
 
-        return result;
+                _logger.LogInformation("Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
+                    branchInfo.Name,
+                    branchInfo.Tier,
+                    branchInfo.MergeBaseSha?[..8] ?? "none",
+                    branchInfo.CommitCount);
+
+                // Use internal method with already-opened repository (avoids 10s penalty per branch!)
+                var commits = commitAnalyzer.GetCommitsSinceInternal(
+                    repo,
+                    branchInfo.Name,
+                    branchInfo.MergeBaseSha);
+
+                result[branchInfo.Name] = [.. commits];
+
+                var loadElapsed = (DateTimeOffset.UtcNow - loadStartTime).TotalSeconds;
+
+                _logger.LogInformation("Loaded {ActualCommits} commits for branch {BranchName} in {TotalSeconds:F2}s",
+                    commits.Count,
+                    branchInfo.Name,
+                    loadElapsed);
+
+                processedBranches++;
+            }
+
+            var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
+            _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);
+
+            return result;
+
+        }, cancellationToken);
     }
 
     private static Dictionary<string, double> AssignBranchLanes(

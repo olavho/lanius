@@ -1,5 +1,6 @@
 using Lanius.Business.Services;
 using LibGit2Sharp;
+using Microsoft.Extensions.Logging;
 using Moq;
 using DomainCommit = Lanius.Business.Models.Commit;
 using DomainDiffStats = Lanius.Business.Models.DiffStats;
@@ -11,6 +12,7 @@ namespace Lanius.Business.Test.Services;
 public class CommitAnalyzerTests
 {
     private Mock<IRepositoryService> _mockRepoService = null!;
+    private Mock<ILogger<CommitAnalyzer>> _mockLogger = null!;
     private CommitAnalyzer _analyzer = null!;
     private string _testRepoId = null!;
     private readonly List<string> _tempPaths = [];
@@ -22,7 +24,8 @@ public class CommitAnalyzerTests
     {
         _testRepoId = "test-repo";
         _mockRepoService = new Mock<IRepositoryService>();
-        _analyzer = new CommitAnalyzer(_mockRepoService.Object);
+        _mockLogger = new Mock<ILogger<CommitAnalyzer>>();
+        _analyzer = new CommitAnalyzer(_mockRepoService.Object, _mockLogger.Object);
     }
 
     [TestCleanup]

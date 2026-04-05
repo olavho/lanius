@@ -1,4 +1,5 @@
 using LibGit2Sharp;
+using Microsoft.Extensions.Logging;
 using DomainCommit = Lanius.Business.Models.Commit;
 using GitCommit = LibGit2Sharp.Commit;
 
@@ -7,7 +8,9 @@ namespace Lanius.Business.Services;
 /// <summary>
 /// Service for analyzing Git commits using LibGit2Sharp.
 /// </summary>
-public class CommitAnalyzer(IRepositoryService repositoryService) : ICommitAnalyzer
+public class CommitAnalyzer(
+    IRepositoryService repositoryService,
+    ILogger<CommitAnalyzer> logger) : ICommitAnalyzer
 {
     public async Task<IReadOnlyList<DomainCommit>> GetCommitsAsync(
         string repositoryId,
@@ -113,6 +116,35 @@ public class CommitAnalyzer(IRepositoryService repositoryService) : ICommitAnaly
         };
     }
 
+    /// <summary>
+    /// Fast commit mapping that skips expensive O(n²) GetBranchesForCommit lookup.
+    /// Use when loading commits for a specific branch (we already know which branch it belongs to).
+    /// Skips diff stats calculation for performance (not needed for layout visualization).
+    /// </summary>
+    private DomainCommit MapCommitFast(GitCommit gitCommit, Repository repo, string branchName)
+    {
+        // Skip diff stats entirely for layout - saves ~20ms per commit
+        // Diff stats are only needed for commit detail views, not visualization
+        var stats = new Models.DiffStats
+        {
+            LinesAdded = 0,
+            LinesRemoved = 0,
+            FilesChanged = 0
+        };
+
+        return new DomainCommit
+        {
+            Sha = gitCommit.Sha,
+            Author = gitCommit.Author.Name,
+            AuthorEmail = gitCommit.Author.Email,
+            Timestamp = gitCommit.Author.When,
+            Message = gitCommit.Message,
+            ParentShas = [.. gitCommit.Parents.Select(p => p.Sha)],
+            Stats = stats,
+            Branches = [branchName] // We already know the branch - skip expensive lookup
+        };
+    }
+
     private static Models.DiffStats CalculateDiffStats(Repository repo, GitCommit commit)
     {
         if (!commit.Parents.Any())
@@ -156,28 +188,65 @@ public class CommitAnalyzer(IRepositoryService repositoryService) : ICommitAnaly
     {
         return await Task.Run(() =>
         {
+            var repoOpenStart = DateTimeOffset.UtcNow;
             using var repo = OpenRepository(repositoryId);
+            var repoOpenElapsed = (DateTimeOffset.UtcNow - repoOpenStart).TotalMilliseconds;
 
-            var branch = repo.Branches[branchName]
-                ?? throw new InvalidOperationException($"Branch not found: {branchName}");
+            logger.LogInformation("Opened repository for {BranchName} in {OpenTimeMs:F0}ms",
+                branchName, repoOpenElapsed);
 
-            IEnumerable<GitCommit> commits;
-
-            if (sinceCommitSha == null)
-            {
-                // No merge base - return all commits
-                commits = branch.Commits;
-            }
-            else
-            {
-                // Manually filter commits: stop at merge base
-                commits = branch.Commits.TakeWhile(c => c.Sha != sinceCommitSha);
-            }
-
-            // Map to domain commits
-            return commits.Select(c => MapCommit(c, repo)).ToList() as IReadOnlyList<DomainCommit>;
+            return GetCommitsSinceInternal(repo, branchName, sinceCommitSha);
 
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Internal method for batch loading commits from an already-opened repository.
+    /// Use this when loading multiple branches to avoid expensive repository open/close cycles.
+    /// </summary>
+    public IReadOnlyList<DomainCommit> GetCommitsSinceInternal(
+        Repository repo,
+        string branchName,
+        string? sinceCommitSha = null)
+    {
+        var branch = repo.Branches[branchName]
+            ?? throw new InvalidOperationException($"Branch not found: {branchName}");
+
+        IEnumerable<GitCommit> commits;
+
+        if (sinceCommitSha == null)
+        {
+            // No merge base - return all commits
+            var startTime = DateTimeOffset.UtcNow;
+            var commitList = branch.Commits.ToList();
+            var elapsed = (DateTimeOffset.UtcNow - startTime).TotalSeconds;
+
+            logger.LogInformation(
+                "Enumerated {CommitCount} commits for branch {BranchName} in {ElapsedSeconds:F1}s",
+                commitList.Count,
+                branchName,
+                elapsed);
+
+            commits = commitList;
+        }
+        else
+        {
+            // Manually filter commits: stop at merge base
+            commits = branch.Commits.TakeWhile(c => c.Sha != sinceCommitSha);
+        }
+
+        // Map to domain commits
+        var startMapping = DateTimeOffset.UtcNow;
+        var result = commits.Select(c => MapCommitFast(c, repo, branchName)).ToList() as IReadOnlyList<DomainCommit>;
+        var mappingElapsed = (DateTimeOffset.UtcNow - startMapping).TotalSeconds;
+
+        logger.LogInformation(
+            "Mapped {CommitCount} commits for branch {BranchName} in {ElapsedSeconds:F1}s",
+            result.Count,
+            branchName,
+            mappingElapsed);
+
+        return result;
     }
 
     private static List<string> GetBranchesForCommit(Repository repo, GitCommit commit)

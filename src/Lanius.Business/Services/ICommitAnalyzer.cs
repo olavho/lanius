@@ -44,6 +44,19 @@ public interface ICommitAnalyzer
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Internal batch method for loading commits from an already-opened repository.
+    /// Avoids expensive repository open/close cycles when loading multiple branches.
+    /// </summary>
+    /// <param name="repo">Already-opened LibGit2Sharp Repository instance.</param>
+    /// <param name="branchName">Branch name.</param>
+    /// <param name="sinceCommitSha">SHA of commit to exclude (merge base). If null, returns all commits.</param>
+    /// <returns>List of commits since the specified commit.</returns>
+    IReadOnlyList<Commit> GetCommitsSinceInternal(
+        LibGit2Sharp.Repository repo,
+        string branchName,
+        string? sinceCommitSha = null);
+
+    /// <summary>
     /// Get commits in chronological order (for replay mode).
     /// </summary>
     /// <param name="repositoryId">The repository ID.</param>
