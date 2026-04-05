@@ -257,9 +257,9 @@ async function loadRepository() {
     if (!state.repositoryId) return;
 
     try {
-        updateStatus('repo-status', 'Loading branch overview...');
+        updateStatus('repo-status', 'Loading repository layout...');
 
-        // Get branch filter patterns - handle empty/whitespace properly
+        // Get branch filter patterns
         const branchFilterInput = document.getElementById('branch-pattern').value;
         const branchFilter = branchFilterInput ? branchFilterInput.trim() : '';
         const hasFilter = branchFilter.length > 0;
@@ -267,87 +267,54 @@ async function loadRepository() {
         console.log('Branch filter input:', `"${branchFilterInput}"`);
         console.log('Has filter:', hasFilter);
 
-        // Use the new overview endpoint that returns only significant commits
-        // Note: includeRemote defaults to true on the server
-        let overviewUrl = `${API_URL}/api/repositories/${state.repositoryId}/branches/overview`;
+        // Use the new layout endpoint
+        let layoutUrl = `${API_URL}/api/repository/${state.repositoryId}/layout?mode=logical`;
         if (hasFilter) {
-            const patterns = branchFilter.split(',').map(p => p.trim()).filter(p => p.length > 0);
-            console.log('Parsed patterns:', patterns);
-            if (patterns.length > 0) {
-                const queryParams = patterns.map(p => `patterns=${encodeURIComponent(p)}`).join('&');
-                overviewUrl += `?${queryParams}`;
-            }
+            layoutUrl += `&branchFilter=${encodeURIComponent(branchFilter)}`;
         }
 
-        console.log('Fetching branch overview from:', overviewUrl);
-        const overviewResponse = await fetch(overviewUrl);
-        if (!overviewResponse.ok) {
-            const errorText = await overviewResponse.text();
+        console.log('Fetching layout from:', layoutUrl);
+        const layoutResponse = await fetch(layoutUrl);
+        if (!layoutResponse.ok) {
+            const errorText = await layoutResponse.text();
             console.error('API Error Response:', errorText);
-            throw new Error(`Failed to load branch overview: ${overviewResponse.statusText}`);
+            throw new Error(`Failed to load layout: ${layoutResponse.statusText}`);
         }
 
-        const overview = await overviewResponse.json();
-        console.log('=== BRANCH OVERVIEW LOADED ===');
-        console.log('Full response keys:', Object.keys(overview));
-        console.log('- Branches:', overview.branches.length, 'First 5:', overview.branches.slice(0, 5).map(b => b.name));
-        console.log('- Significant commits:', overview.significantCommits.length);
-        console.log('- Relationships:', overview.relationships.length);
+        const layout = await layoutResponse.json();
+        console.log('=== LAYOUT LOADED ===');
+        console.log('Mode:', layout.mode);
+        console.log('Nodes:', layout.nodes.length);
+        console.log('Edges:', layout.edges.length);
+        console.log('Dimensions:', layout.width, 'x', layout.height);
+        console.log('Total commits:', layout.totalCommits);
+        console.log('Total branches:', layout.totalBranches);
 
-        // Extract branches and commits from overview
-        state.branches = overview.branches.map(b => ({
-            name: b.name,
-            tipSha: b.headSha,
-            timestamp: b.headTimestamp
-        }));
-
-        state.commits = overview.significantCommits.map(c => ({
-            sha: c.sha,
-            author: c.author,
-            authorEmail: '', // Not included in overview
-            timestamp: c.timestamp,
-            message: c.shortMessage,
-            shortMessage: c.shortMessage,
-            parentShas: [], // We don't need parent relationships for overview
-            isMerge: false,
-            stats: c.stats,
-            branches: c.branches,
-            significance: c.type // Store the significance type
-        }));
-
-        // Store relationships for visualization
-        state.relationships = overview.relationships || [];
-
-        console.log(`Loaded ${state.branches.length} branches and ${state.commits.length} significant commits`);
-        console.log('Relationships:', state.relationships);
+        // Store layout data in state
+        state.layoutData = layout;
+        state.branches = []; // Extract unique branches from nodes
+        const branchSet = new Set();
+        layout.nodes.forEach(node => {
+            branchSet.add(node.branchName);
+        });
+        branchSet.forEach(branchName => {
+            state.branches.push({ name: branchName });
+        });
 
         // Check if we have data to render
-        if (state.commits.length === 0) {
+        if (layout.nodes.length === 0) {
             updateStatus('repo-status', 'No commits found', true);
             updateCanvasInfo('No commits to display');
             clearVisualization();
             return;
         }
 
-        if (state.branches.length === 0) {
-            updateStatus('repo-status', 'No branches found matching filter', true);
-            updateCanvasInfo('No branches to display');
-            clearVisualization();
-            return;
-        }
-
-        // Render visualization
-        console.log('Calling renderVisualization with', state.commits.length, 'commits and', state.branches.length, 'branches');
+        // Render visualization with new layout data
+        console.log('Calling renderVisualization with layout data');
         renderVisualization();
 
-        const commitTypeBreakdown = overview.significantCommits.reduce((acc, c) => {
-            acc[c.type] = (acc[c.type] || 0) + 1;
-            return acc;
-        }, {});
-        console.log('Commit types:', commitTypeBreakdown);
-
-        updateCanvasInfo(`${state.commits.length} significant commits (${state.branches.length} branches)`);
-        updateStatus('repo-status', `Loaded overview: ${state.commits.length} commits, ${state.branches.length} branches`);
+        updateCanvasInfo(`${layout.totalCommits} commits (${layout.totalBranches} branches)`);
+        updateStatus('repo-status', `Loaded layout: ${layout.totalCommits} commits, ${layout.totalBranches} branches`);
 
     } catch (err) {
         console.error('Load error:', err);

@@ -402,4 +402,161 @@ public class LogicalLayoutEngineTests
 
         Assert.IsTrue(exception, "Expected ArgumentNullException to be thrown for null options");
     }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchSplit_CreatesBranchEdge()
+    {
+        // Arrange: main branch with commit, feature branch splits from it
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+
+        var mainBranch = new Branch
+        {
+            Name = "main",
+            FullName = "refs/heads/main",
+            TipSha = "main1",
+            IsRemote = false
+        };
+
+        var featureBranch = new Branch
+        {
+            Name = "feature",
+            FullName = "refs/heads/feature",
+            TipSha = "feature1",
+            IsRemote = false
+        };
+
+        var mainCommit = new Commit
+        {
+            Sha = "main1",
+            Author = "Author",
+            AuthorEmail = "author@example.com",
+            Timestamp = DateTimeOffset.UtcNow.AddHours(-2),
+            Message = "Main commit",
+            ParentShas = []
+        };
+
+        var featureCommit = new Commit
+        {
+            Sha = "feature1",
+            Author = "Author",
+            AuthorEmail = "author@example.com",
+            Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
+            Message = "Feature commit",
+            ParentShas = ["main1"] // Feature branches from main
+        };
+
+        _mockBranchAnalyzer
+            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainCommit]);
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsAsync(repositoryId, "feature", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainCommit, featureCommit]); // Feature includes parent from main
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        Assert.HasCount(2, result.Nodes);
+
+        // Should have branch edge from main1 to feature1
+        var branchEdge = result.Edges.FirstOrDefault(e =>
+            e.FromCommitId == "main1" &&
+            e.ToCommitId == "feature1" &&
+            e.Type == EdgeType.Branch);
+
+        Assert.IsNotNull(branchEdge, "Should have Branch-type edge for split point");
+        Assert.AreEqual("feature", branchEdge.BranchName);
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MergeBranches_CreatesMergeEdge()
+    {
+        // Arrange: feature branch merges back into main
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+
+        var mainBranch = new Branch
+        {
+            Name = "main",
+            FullName = "refs/heads/main",
+            TipSha = "merge1",
+            IsRemote = false
+        };
+
+        var featureBranch = new Branch
+        {
+            Name = "feature",
+            FullName = "refs/heads/feature",
+            TipSha = "feature1",
+            IsRemote = false
+        };
+
+        var baseCommit = new Commit
+        {
+            Sha = "base1",
+            Author = "Author",
+            AuthorEmail = "author@example.com",
+            Timestamp = DateTimeOffset.UtcNow.AddHours(-3),
+            Message = "Base commit",
+            ParentShas = []
+        };
+
+        var featureCommit = new Commit
+        {
+            Sha = "feature1",
+            Author = "Author",
+            AuthorEmail = "author@example.com",
+            Timestamp = DateTimeOffset.UtcNow.AddHours(-2),
+            Message = "Feature work",
+            ParentShas = ["base1"]
+        };
+
+        var mergeCommit = new Commit
+        {
+            Sha = "merge1",
+            Author = "Author",
+            AuthorEmail = "author@example.com",
+            Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
+            Message = "Merge feature into main",
+            ParentShas = ["base1", "feature1"] // Two parents = merge (IsMerge computed from this)
+        };
+
+        _mockBranchAnalyzer
+            .Setup(x => x.GetBranchesAsync(repositoryId, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsAsync(repositoryId, "main", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([baseCommit, mergeCommit]);
+        _mockCommitAnalyzer
+            .Setup(x => x.GetCommitsAsync(repositoryId, "feature", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([baseCommit, featureCommit]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        Assert.HasCount(3, result.Nodes);
+
+        // Should have merge edge from feature1 to merge1
+        var mergeEdge = result.Edges.FirstOrDefault(e =>
+            e.FromCommitId == "feature1" &&
+            e.ToCommitId == "merge1" &&
+            e.Type == EdgeType.Merge);
+
+        Assert.IsNotNull(mergeEdge, "Should have Merge-type edge for merge point");
+        Assert.AreEqual("main", mergeEdge.BranchName, "Merge edge should belong to target branch");
+
+        // Verify merge commit is marked as significant
+        var mergeNode = result.Nodes.First(n => n.CommitId == "merge1");
+        Assert.IsTrue(mergeNode.IsSignificant);
+        Assert.AreEqual(6, mergeNode.Radius);
+    }
 }
+

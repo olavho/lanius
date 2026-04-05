@@ -5,7 +5,7 @@ const Visualization = (() => {
     let svg, g, xScale, yScale;
     let commitData = [];
     let branchData = [];
-    
+
     const config = {
         margin: { top: 60, right: 40, bottom: 40, left: 100 },
         commitRadius: 4,
@@ -48,7 +48,7 @@ const Visualization = (() => {
     function render(commits, branches) {
         console.log('=== Visualization.render START ===');
         console.log('Input:', commits.length, 'commits,', branches.length, 'branches');
-        
+
         commitData = commits;
         branchData = branches;
 
@@ -57,13 +57,13 @@ const Visualization = (() => {
             clearAll();
             return;
         }
-        
+
         if (branches.length === 0) {
             console.warn('No branches to render');
             clearAll();
             return;
         }
-        
+
         console.log('Sample commit:', commits[0]);
         console.log('Sample branch:', branches[0]);
         console.log('All branch names:', branches.map(b => b.name));
@@ -73,7 +73,7 @@ const Visualization = (() => {
             console.log('Branch Y positions:', Array.from(branchYMap.entries()));
             console.log('X scale domain:', xScale.domain());
             console.log('X scale range:', xScale.range());
-            
+
             renderTimelineGrid();
             renderBranchLines();
             renderCommits();
@@ -90,15 +90,15 @@ const Visualization = (() => {
         g.selectAll('.timeline-label').remove();
 
         const [minDate, maxDate] = xScale.domain();
-        
+
         // Create grid group
         const gridGroup = g.append('g').attr('class', 'timeline-grid');
-        
+
         // Generate year boundaries
         const years = [];
         let currentYear = minDate.getFullYear();
         const maxYear = maxDate.getFullYear();
-        
+
         while (currentYear <= maxYear) {
             const yearDate = new Date(currentYear, 0, 1); // January 1st
             if (yearDate >= minDate && yearDate <= maxDate) {
@@ -110,7 +110,7 @@ const Visualization = (() => {
         // Draw vertical grid lines for each year
         years.forEach(item => {
             const x = xScale(item.date);
-            
+
             gridGroup.append('line')
                 .attr('x1', x)
                 .attr('y1', -10) // Start just above branches (was -config.margin.top + 30)
@@ -123,10 +123,10 @@ const Visualization = (() => {
 
         // Draw labels at top for years - more compact positioning
         const labelGroup = g.append('g').attr('class', 'timeline-label');
-        
+
         years.forEach(item => {
             const x = xScale(item.date);
-            
+
             // Draw year label - more compact positioning
             labelGroup.append('text')
                 .attr('x', x + 5)
@@ -136,13 +136,13 @@ const Visualization = (() => {
                 .attr('fill', config.colors.commitDefault)
                 .text(item.year);
         });
-        
+
         // Add month markers (very light, minimal) within each year
         const months = [];
         let currentDate = new Date(minDate);
         currentDate.setDate(1); // Start of month
         currentDate.setHours(0, 0, 0, 0);
-        
+
         while (currentDate <= maxDate) {
             months.push(new Date(currentDate));
             currentDate.setMonth(currentDate.getMonth() + 1);
@@ -151,7 +151,7 @@ const Visualization = (() => {
         // Draw very light month lines (minimal visual impact)
         months.forEach(date => {
             const x = xScale(date);
-            
+
             gridGroup.append('line')
                 .attr('x1', x)
                 .attr('y1', -5) // Start just above branches
@@ -160,7 +160,7 @@ const Visualization = (() => {
                 .attr('stroke', '#f0f0f0')
                 .attr('stroke-width', 0.5)
                 .attr('opacity', 0.15);
-            
+
             // Add tiny month label (optional - can remove if too cluttered)
             const month = date.toLocaleDateString('en-US', { month: 'short' });
             labelGroup.append('text')
@@ -184,7 +184,7 @@ const Visualization = (() => {
         });
 
         yScale.domain([0, branchData.length * config.branchSpacing]);
-        
+
         return branchYMap;
     }
 
@@ -193,35 +193,35 @@ const Visualization = (() => {
         g.selectAll('.branch-group').remove();
 
         const branchYMap = updateScales();
-        
+
         console.log('Rendering', branchData.length, 'branches');
-        
+
         branchData.forEach((branch, i) => {
             const y = i * config.branchSpacing;
-            
+
             const branchGroup = g.append('g')
                 .attr('class', 'branch-group');
 
             // Get commits for this branch to determine line start and end
-            const branchCommits = commitData.filter(c => 
+            const branchCommits = commitData.filter(c =>
                 c.branches && c.branches.includes(branch.name)
             );
-            
+
             console.log(`Branch ${branch.name}: ${branchCommits.length} commits`);
-            
+
             if (branchCommits.length === 0) {
                 console.warn('No commits found for branch:', branch.name);
                 return; // Skip branches with no commits
             }
-            
+
             // Find the earliest (leftmost) commit on this branch
-            const earliestCommit = branchCommits.reduce((earliest, current) => 
+            const earliestCommit = branchCommits.reduce((earliest, current) =>
                 new Date(current.timestamp) < new Date(earliest.timestamp) ? current : earliest
             );
             const lineStartX = xScale(new Date(earliestCommit.timestamp)) - 20; // Start 20px before first commit
-            
+
             // Find the latest (rightmost) commit on this branch
-            const latestCommit = branchCommits.reduce((latest, current) => 
+            const latestCommit = branchCommits.reduce((latest, current) =>
                 new Date(current.timestamp) > new Date(latest.timestamp) ? current : latest
             );
             const lineEndX = xScale(new Date(latestCommit.timestamp)) + 50; // End 50px after last commit
@@ -246,7 +246,7 @@ const Visualization = (() => {
             const fullName = branch.name.replace(/^origin\//, '');
             const boxSize = 8;
             const boxX = lineStartX - 15; // Position box slightly before line start
-            
+
             const indicatorBox = branchGroup.append('rect')
                 .attr('class', 'branch-indicator')
                 .attr('x', boxX)
@@ -261,22 +261,22 @@ const Visualization = (() => {
 
             // Add hover tooltip showing full branch name (BEFORE transition)
             indicatorBox.append('title').text(fullName);
-            
+
             // Add hover highlight effect (BEFORE transition)
-            indicatorBox.on('mouseenter', function() {
+            indicatorBox.on('mouseenter', function () {
                 d3.select(this)
                     .transition()
                     .duration(200)
                     .attr('opacity', 1)
                     .attr('stroke-width', 2);
-            }).on('mouseleave', function() {
+            }).on('mouseleave', function () {
                 d3.select(this)
                     .transition()
                     .duration(200)
                     .attr('opacity', 0.8)
                     .attr('stroke-width', 1);
             });
-            
+
             // Apply fade-in transition AFTER appending title and events
             indicatorBox
                 .attr('opacity', 0)
@@ -284,7 +284,7 @@ const Visualization = (() => {
                 .duration(500)
                 .attr('opacity', 0.8);
         });
-        
+
         console.log('Branch rendering complete');
     }
 
@@ -328,23 +328,23 @@ const Visualization = (() => {
         // Draw cross-branch connections (from merge base on main to first commit on branch)
         const relationships = window.LaniusApp.state.relationships || [];
         console.log('Drawing cross-branch connections for', relationships.length, 'relationships');
-        
+
         relationships.forEach(rel => {
             const mergeBaseCommit = commitMap.get(rel.commitSha);
             if (!mergeBaseCommit) return;
-            
+
             // Find the first commit on branch2 (the child branch)
-            const branch2Commits = commitData.filter(c => 
+            const branch2Commits = commitData.filter(c =>
                 c.branches && c.branches.includes(rel.branch2)
             ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
+
             if (branch2Commits.length > 0) {
                 const firstCommitOnBranch = branch2Commits[0];
-                
-                console.log(`Cross-branch: ${rel.branch1} ? ${rel.branch2}`, 
-                    'from', mergeBaseCommit.sha.substring(0, 7), 
+
+                console.log(`Cross-branch: ${rel.branch1} ? ${rel.branch2}`,
+                    'from', mergeBaseCommit.sha.substring(0, 7),
                     'to', firstCommitOnBranch.sha.substring(0, 7));
-                
+
                 // Draw diagonal line from merge base to first commit on branch
                 g.append('line')
                     .attr('class', 'cross-branch-connection')
@@ -364,7 +364,7 @@ const Visualization = (() => {
 
         // Draw branch connection lines (between commits on same branch)
         const branchLines = [];
-        
+
         // Group commits by branch
         const commitsByBranch = new Map();
         commitData.forEach(commit => {
@@ -381,15 +381,15 @@ const Visualization = (() => {
         // For each branch, draw lines between its commits in chronological order
         commitsByBranch.forEach((commits, branchName) => {
             // Sort by timestamp (oldest first)
-            const sortedCommits = commits.slice().sort((a, b) => 
+            const sortedCommits = commits.slice().sort((a, b) =>
                 new Date(a.timestamp) - new Date(b.timestamp)
             );
-            
+
             // Draw lines between consecutive commits
             for (let i = 0; i < sortedCommits.length - 1; i++) {
                 const source = sortedCommits[i];
                 const target = sortedCommits[i + 1];
-                
+
                 branchLines.push({
                     source,
                     target,
@@ -483,16 +483,16 @@ const Visualization = (() => {
 
     function animateReplayCommit(commit) {
         animateNewCommit(commit);
-        
+
         // Update stats incrementally
         if (commit.stats) {
             const currentAdditions = parseInt(document.getElementById('stat-additions').textContent.replace('+', ''));
             const currentDeletions = parseInt(document.getElementById('stat-deletions').textContent.replace('-', ''));
-            
+
             document.getElementById('stat-additions').textContent = `+${currentAdditions + commit.stats.linesAdded}`;
             document.getElementById('stat-deletions').textContent = `-${currentDeletions + commit.stats.linesRemoved}`;
         }
-        
+
         const currentCommits = parseInt(document.getElementById('stat-commits').textContent);
         document.getElementById('stat-commits').textContent = currentCommits + 1;
     }
@@ -513,7 +513,7 @@ const Visualization = (() => {
 
     function getCommitSize(commit) {
         if (!commit.stats) return config.commitRadius;
-        
+
         // Scale based on total changes (logarithmic)
         const totalChanges = commit.stats.totalChanges || 0;
         const scale = Math.log(totalChanges + 1) / Math.log(100);
@@ -522,9 +522,9 @@ const Visualization = (() => {
 
     function getCommitColor(commit) {
         if (!commit.stats) return config.colors.commitDefault;
-        
+
         const indicator = commit.stats.colorIndicator || 0;
-        
+
         // Monochrome gradient based on indicator
         // -1 (deletions) to +1 (additions)
         if (indicator > 0) {
@@ -536,13 +536,13 @@ const Visualization = (() => {
             const intensity = Math.floor(Math.abs(indicator) * 20);
             return `rgb(${10 + intensity}, ${10 + intensity}, ${10 + intensity})`;
         }
-        
+
         return config.colors.commitDefault;
     }
 
     function handleCommitHover(event, d) {
         const node = d3.select(event.currentTarget);
-        
+
         node.select('circle')
             .transition()
             .duration(200)
@@ -557,7 +557,7 @@ const Visualization = (() => {
     function handleCommitUnhover(event) {
         const node = d3.select(event.currentTarget);
         const commit = node.datum();
-        
+
         node.select('circle')
             .transition()
             .duration(200)
@@ -608,7 +608,7 @@ const Visualization = (() => {
     function updateStatsFromCommits() {
         const totalAdditions = commitData.reduce((sum, c) => sum + (c.stats?.linesAdded || 0), 0);
         const totalDeletions = commitData.reduce((sum, c) => sum + (c.stats?.linesRemoved || 0), 0);
-        
+
         document.getElementById('stat-additions').textContent = `+${totalAdditions}`;
         document.getElementById('stat-deletions').textContent = `-${totalDeletions}`;
     }
@@ -640,28 +640,28 @@ const Visualization = (() => {
 
     function initVisualization() {
         const container = d3.select('#commit-graph');
-        
+
         // Calculate appropriate width based on time span
         const calculateWidth = () => {
             if (commitData.length === 0) return dimensions.width;
-            
+
             const timestamps = commitData.map(c => new Date(c.timestamp));
             const [minDate, maxDate] = d3.extent(timestamps);
             const daysDiff = (maxDate - minDate) / (1000 * 60 * 60 * 24);
-            
+
             // Allocate ~2px per day for readable spacing
             // Minimum of viewport width, maximum of 10x viewport width
             const calculatedWidth = Math.max(
                 dimensions.width,
                 Math.min(daysDiff * 2, dimensions.width * 10)
             );
-            
+
             console.log(`Timeline span: ${daysDiff.toFixed(0)} days, calculated width: ${calculatedWidth.toFixed(0)}px`);
             return calculatedWidth;
         };
 
         const svgWidth = calculateWidth();
-        
+
         svg = container
             .attr('width', '100%')
             .attr('height', dimensions.height)
@@ -679,9 +679,219 @@ const Visualization = (() => {
         console.log('Visualization initialized with width:', svgWidth);
     }
 
+    function renderLayout(layout) {
+        console.log('=== renderLayout START ===');
+        console.log('Mode:', layout.mode);
+        console.log('Nodes:', layout.nodes.length);
+        console.log('Edges:', layout.edges.length);
+        console.log('Dimensions:', layout.width, 'x', layout.height);
+
+        if (layout.nodes.length === 0) {
+            console.warn('No nodes to render');
+            clearAll();
+            return;
+        }
+
+        try {
+            // Clear existing visualization
+            g.selectAll('*').remove();
+
+            // Update canvas dimensions based on layout
+            const container = document.getElementById('commit-graph');
+            svg.attr('width', Math.max(layout.width, container.clientWidth))
+                .attr('height', Math.max(layout.height, container.clientHeight));
+
+            // Render edges (branch lines)
+            const edgeGroups = g.selectAll('.edge')
+                .data(layout.edges)
+                .enter()
+                .append('g')
+                .attr('class', d => `edge edge-${d.type.toLowerCase()}`);
+
+            edgeGroups.each(function (d) {
+                const edge = d3.select(this);
+
+                if (d.points && d.points.length >= 2) {
+                    edge.append('line')
+                        .attr('x1', d.points[0].item1)
+                        .attr('y1', d.points[0].item2)
+                        .attr('x2', d.points[1].item1)
+                        .attr('y2', d.points[1].item2)
+                        .attr('stroke', getEdgeColor(d.type))
+                        .attr('stroke-width', getEdgeWidth(d.type))
+                        .attr('stroke-dasharray', getEdgeDashArray(d.type))
+                        .attr('opacity', 0)
+                        .transition()
+                        .duration(500)
+                        .attr('opacity', getEdgeOpacity(d.type));
+                }
+            });
+
+            // Render nodes (commits)
+            const nodeGroups = g.selectAll('.commit-node')
+                .data(layout.nodes)
+                .enter()
+                .append('g')
+                .attr('class', d => `commit-node ${d.isSignificant ? 'significant' : 'normal'}`)
+                .attr('transform', d => `translate(${d.x}, ${d.y})`)
+                .on('click', (event, d) => showNodeDetail(d))
+                .on('mouseenter', handleNodeHover)
+                .on('mouseleave', handleNodeUnhover);
+
+            nodeGroups.append('circle')
+                .attr('r', 0)
+                .attr('fill', d => getNodeColor(d))
+                .attr('stroke', config.colors.commitDefault)
+                .attr('stroke-width', d => d.isSignificant ? 1.5 : 1)
+                .transition()
+                .duration(500)
+                .attr('r', d => d.radius);
+
+            console.log('=== renderLayout COMPLETE ===');
+        } catch (error) {
+            console.error('Error rendering layout:', error);
+            console.error('Stack trace:', error.stack);
+        }
+    }
+
+    function getEdgeColor(edgeType) {
+        switch (edgeType) {
+            case 'Branch':
+                return '#4CAF50'; // Green for branch splits
+            case 'Merge':
+                return '#FF9800'; // Orange for merges
+            case 'Normal':
+            default:
+                return config.colors.link; // Gray for normal connections
+        }
+    }
+
+    function getEdgeWidth(edgeType) {
+        switch (edgeType) {
+            case 'Branch':
+            case 'Merge':
+                return 2;
+            case 'Normal':
+            default:
+                return config.lineWidth;
+        }
+    }
+
+    function getEdgeDashArray(edgeType) {
+        switch (edgeType) {
+            case 'Branch':
+                return '5,5'; // Dashed for branches
+            case 'Merge':
+                return '3,3'; // Dashed for merges
+            case 'Normal':
+            default:
+                return null; // Solid for normal
+        }
+    }
+
+    function getEdgeOpacity(edgeType) {
+        switch (edgeType) {
+            case 'Branch':
+            case 'Merge':
+                return 0.7;
+            case 'Normal':
+            default:
+                return 0.4;
+        }
+    }
+
+    function getNodeColor(node) {
+        // Color based on branch
+        if (node.branchName === 'main' || node.branchName === 'master') {
+            return '#2d2d2d'; // Dark for main
+        } else if (node.branchName.includes('release')) {
+            return '#4a90e2'; // Blue for releases
+        } else if (node.branchName.includes('feature')) {
+            return '#7ed321'; // Green for features
+        } else if (node.branchName.includes('hotfix') || node.branchName.includes('fix')) {
+            return '#e74c3c'; // Red for fixes
+        }
+        return config.colors.commitDefault;
+    }
+
+    function showNodeDetail(node) {
+        // Show commit detail popup
+        if (window.LaniusApp && window.LaniusApp.showCommitDetail) {
+            // Map node data to commit structure
+            const commit = {
+                sha: node.commitId,
+                author: node.author || 'Unknown',
+                authorEmail: '',
+                timestamp: node.timestamp,
+                message: node.message || 'No message',
+                branches: [node.branchName],
+                stats: null
+            };
+            window.LaniusApp.showCommitDetail(commit);
+        }
+    }
+
+    function handleNodeHover(event, d) {
+        const node = d3.select(event.currentTarget);
+
+        node.select('circle')
+            .transition()
+            .duration(200)
+            .ease(d3.easeCubicOut)
+            .attr('r', d.radius * 1.5)
+            .attr('stroke-width', 2);
+
+        // Show tooltip
+        showNodeTooltip(event, d);
+    }
+
+    function handleNodeUnhover(event, d) {
+        const node = d3.select(event.currentTarget);
+
+        node.select('circle')
+            .transition()
+            .duration(200)
+            .ease(d3.easeCubicOut)
+            .attr('r', d.radius)
+            .attr('stroke-width', d.isSignificant ? 1.5 : 1);
+
+        hideTooltip();
+    }
+
+    function showNodeTooltip(event, node) {
+        const tooltip = d3.select('body')
+            .append('div')
+            .attr('class', 'tooltip')
+            .style('position', 'absolute')
+            .style('background', '#fafafa')
+            .style('border', '1px solid #1a1a1a')
+            .style('padding', '8px')
+            .style('font-family', 'var(--font-mono)')
+            .style('font-size', '11px')
+            .style('pointer-events', 'none')
+            .style('z-index', '1000')
+            .style('opacity', 0);
+
+        tooltip.html(`
+            <div><strong>${node.message || 'Commit'}</strong></div>
+            <div>${node.author || 'Unknown author'}</div>
+            <div>${new Date(node.timestamp).toLocaleDateString()}</div>
+            <div>Branch: ${node.branchName}</div>
+            ${node.isSignificant ? '<div style="color: #2196F3;">Significant commit</div>' : ''}
+        `);
+
+        tooltip
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px')
+            .transition()
+            .duration(200)
+            .style('opacity', 1);
+    }
+
     return {
         initialize,
         render,
+        renderLayout,
         animateNewCommit,
         animateReplayCommit,
         clear: clearAll
@@ -693,11 +903,25 @@ Visualization.initialize();
 
 // Export to global scope
 window.renderVisualization = () => {
-    Visualization.render(window.LaniusApp.state.commits, window.LaniusApp.state.branches);
+    const layoutData = window.LaniusApp.state.layoutData;
+    if (layoutData) {
+        Visualization.renderLayout(layoutData);
+    } else {
+        // Fallback to old method if no layout data
+        Visualization.render(window.LaniusApp.state.commits, window.LaniusApp.state.branches);
+    }
 };
 
 window.clearVisualization = () => {
     Visualization.clear();
+};
+
+window.animateNewCommit = (commit) => {
+    Visualization.animateNewCommit(commit);
+};
+
+window.animateReplayCommit = (commit) => {
+    Visualization.animateReplayCommit(commit);
 };
 
 window.animateNewCommit = (commit) => {

@@ -158,35 +158,56 @@ Lanius.Business/
 ### Phase 2: Logical Layout - Complete Branch Lines
 **Goal**: Render all commits with proper branch line visualization
 
-**Status**: ❌ **NOT STARTED**
+**Status**: ✅ **COMPLETE**
 
-**Tasks**:
-1. ❌ Extend `LogicalLayoutEngine` to calculate positions for ALL commits
-2. ❌ Calculate branch line paths (y-position per branch)
-3. ❌ Identify split points (branch creation) and merge points
-4. ❌ Generate `LayoutEdge` objects for branch line segments
-5. ❌ Add progress callback for long-running calculations
+**Backend Tasks** (Complete):
+1. ✅ Calculate positions for ALL commits
+2. ✅ Calculate branch line paths (y-position per branch)
+3. ✅ Identify split points (branch creation) - EdgeType.Branch
+4. ✅ Identify merge points - EdgeType.Merge  
+5. ✅ Generate `LayoutEdge` objects for branch line segments
+6. ✅ Progress reporting functional
+7. ✅ Add unit tests (11 tests total, all passing)
 
-**Algorithm**:
-```
-1. For each branch, assign a Y-lane (horizontal line)
-2. For each commit:
-   - X position = timestamp (chronological)
-   - Y position = branch lane
-   - Size = small dot (4px) vs significant commit (6px)
-3. For split points:
-   - Create edge from parent commit (different branch) to first commit
-4. For merge points:
-   - Create edge from last commit to merge commit (on main branch)
-```
+**Frontend Tasks** (Complete):
+1. ✅ Update `app.js` to consume layout API (`GET /api/repository/{id}/layout`)
+2. ✅ Add `renderLayout()` method to `visualization.js`
+3. ✅ Render `LayoutNode` objects as circles (4px normal, 6px significant)
+4. ✅ Render `LayoutEdge` objects as lines (different colors/styles for Normal/Branch/Merge)
+5. ✅ Add legend for edge types (Normal=gray, Branch=green dashed, Merge=orange dashed)
+6. ✅ Add hover tooltips for nodes
+7. ✅ Add click handling for commit details
 
-**Frontend Changes**:
-- Update `visualization.js` to render `LayoutNode` and `LayoutEdge`
-- Small dots for all commits (existing: 4px radius)
-- Branch lines connecting commits
+**Implementation Details**:
 
-**Duration**: 3-4 days  
-**Risk**: Medium (requires accurate split/merge detection)
+**Backend** (LogicalLayoutEngine):
+- Assigns each commit to its "primary branch" (first occurrence)
+- Creates EdgeType.Branch for splits (parent on different branch, single parent)
+- Creates EdgeType.Merge for merges (multiple parents from different branches)
+- Creates EdgeType.Normal for same-branch commit sequences
+- Avoids duplicate edges
+
+**Frontend** (visualization.js):
+- New `renderLayout(layout)` method consumes layout API response
+- Renders edges with type-specific styling:
+  - Normal: gray, solid, width 1px, opacity 0.4
+  - Branch: green (#4CAF50), dashed (5,5), width 2px, opacity 0.7
+  - Merge: orange (#FF9800), dashed (3,3), width 2px, opacity 0.7
+- Renders nodes with branch-specific colors:
+  - main/master: dark gray (#2d2d2d)
+  - release branches: blue (#4a90e2)
+  - feature branches: green (#7ed321)
+  - hotfix branches: red (#e74c3c)
+- Hover effects: enlarge node by 1.5x with tooltip
+- Legend showing all edge types
+
+**Files Modified**:
+- `src/Lanius.Web/wwwroot/js/app.js` - Updated `loadRepository()` to use layout API
+- `src/Lanius.Web/wwwroot/js/visualization.js` - Added `renderLayout()` method
+- `src/Lanius.Web/wwwroot/index.html` - Added edge type legend
+
+**Duration**: 3 days (2 backend, 1 frontend)  
+**Risk**: ✅ Mitigated - Complete end-to-end working
 
 ---
 

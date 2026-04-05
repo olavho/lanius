@@ -203,7 +203,64 @@ public class LogicalLayoutEngine(
         var edges = new List<LayoutEdge>();
         var nodeDict = nodes.ToDictionary(n => n.CommitId);
 
-        // Create edges along each branch
+        // Build commit lookup for parent/child relationships
+        var allCommits = branchCommits.Values.SelectMany(c => c).DistinctBy(c => c.Sha).ToDictionary(c => c.Sha);
+        var commitToBranch = new Dictionary<string, string>();
+        foreach (var (branchName, commits) in branchCommits)
+        {
+            foreach (var commit in commits)
+            {
+                // Map commit to its primary branch (first occurrence)
+                commitToBranch.TryAdd(commit.Sha, branchName);
+            }
+        }
+
+        // Track processed edges to avoid duplicates
+        var processedEdges = new HashSet<(string, string)>();
+
+        // First, add cross-branch edges for splits and merges
+        foreach (var commit in allCommits.Values)
+        {
+            if (!nodeDict.TryGetValue(commit.Sha, out var childNode))
+                continue;
+
+            var childBranch = commitToBranch.GetValueOrDefault(commit.Sha);
+
+            // Check each parent for cross-branch relationships
+            foreach (var parentSha in commit.ParentShas)
+            {
+                if (!nodeDict.TryGetValue(parentSha, out var parentNode))
+                    continue;
+
+                var parentBranch = commitToBranch.GetValueOrDefault(parentSha);
+
+                // If parent is on different branch, this is a branch split or merge
+                if (parentBranch != childBranch && !string.IsNullOrEmpty(parentBranch) && !string.IsNullOrEmpty(childBranch))
+                {
+                    var edgeKey = (parentSha, commit.Sha);
+                    if (processedEdges.Add(edgeKey))
+                    {
+                        // Determine edge type: if commit has multiple parents, it's a merge
+                        var edgeType = commit.ParentShas.Count > 1 ? EdgeType.Merge : EdgeType.Branch;
+
+                        edges.Add(new LayoutEdge
+                        {
+                            FromCommitId = parentSha,
+                            ToCommitId = commit.Sha,
+                            Type = edgeType,
+                            Points =
+                            [
+                                [parentNode.X, parentNode.Y],
+                                [childNode.X, childNode.Y]
+                            ],
+                            BranchName = childBranch // Edge belongs to the child branch
+                        });
+                    }
+                }
+            }
+        }
+
+        // Then create edges along each branch (excluding cross-branch edges already added)
         foreach (var (branchName, commits) in branchCommits)
         {
             var sortedCommits = commits.OrderBy(c => c.Timestamp).ToList();
@@ -213,21 +270,28 @@ public class LogicalLayoutEngine(
                 var fromCommit = sortedCommits[i];
                 var toCommit = sortedCommits[i + 1];
 
-                if (nodeDict.TryGetValue(fromCommit.Sha, out var fromNode) &&
+                // Only create edge if both commits belong to this branch
+                if (commitToBranch.GetValueOrDefault(fromCommit.Sha) == branchName &&
+                    commitToBranch.GetValueOrDefault(toCommit.Sha) == branchName &&
+                    nodeDict.TryGetValue(fromCommit.Sha, out var fromNode) &&
                     nodeDict.TryGetValue(toCommit.Sha, out var toNode))
                 {
-                    edges.Add(new LayoutEdge
+                    var edgeKey = (fromCommit.Sha, toCommit.Sha);
+                    if (processedEdges.Add(edgeKey))
                     {
-                        FromCommitId = fromCommit.Sha,
-                        ToCommitId = toCommit.Sha,
-                        Type = EdgeType.Normal,
-                        Points =
-                        [
-                            [fromNode.X, fromNode.Y],
-                            [toNode.X, toNode.Y]
-                        ],
-                        BranchName = branchName
-                    });
+                        edges.Add(new LayoutEdge
+                        {
+                            FromCommitId = fromCommit.Sha,
+                            ToCommitId = toCommit.Sha,
+                            Type = EdgeType.Normal,
+                            Points =
+                            [
+                                [fromNode.X, fromNode.Y],
+                                [toNode.X, toNode.Y]
+                            ],
+                            BranchName = branchName
+                        });
+                    }
                 }
             }
         }
