@@ -1,7 +1,7 @@
 using Lanius.Business.Analysis.Models;
-using Lanius.Business.Models;
+using Lanius.Business.Replay.Models;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Replay.Services;
 
 /// <summary>
 /// Service for replaying commit history with Rx.NET observables.
@@ -22,7 +22,6 @@ public interface IReplayService
     /// <param name="sessionId">Session ID.</param>
     /// <returns>Observable stream of commits.</returns>
     IObservable<Commit> GetCommitStream(string sessionId);
-
 
     /// <summary>
     /// Adjust playback speed of a running session.
@@ -57,5 +56,4 @@ public interface IReplayService
     /// </summary>
     /// <param name="sessionId">Session ID.</param>
     void StopReplay(string sessionId);
-
 }

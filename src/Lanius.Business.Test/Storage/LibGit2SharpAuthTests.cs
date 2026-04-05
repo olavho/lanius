@@ -1,6 +1,6 @@
 ﻿using LibGit2Sharp;
 
-namespace Lanius.Business.Test.Services;
+namespace Lanius.Business.Test.Storage;
 
 /// <summary>
 /// Minimal tests to understand LibGit2Sharp authentication patterns.

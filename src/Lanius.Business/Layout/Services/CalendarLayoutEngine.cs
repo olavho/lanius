@@ -11,7 +11,6 @@ namespace Lanius.Business.Layout.Services;
 /// </summary>
 public class CalendarLayoutEngine(
     ICommitAnalyzer commitAnalyzer,
-    IBranchAnalyzer branchAnalyzer,
     ILogger<CalendarLayoutEngine> logger) : ILayoutEngine
 {
     private const int MinRadius = 4;

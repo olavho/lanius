@@ -3,10 +3,10 @@ using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Options;
 
-namespace Lanius.Business.Test.Services;
+namespace Lanius.Business.Test.Storage;
 
 [TestClass]
-public class RepositoryServiceTests
+public class RepositoryStorageServiceTests
 {
     private string _testBasePath = null!;
     private RepositoryStorageService _service = null!;

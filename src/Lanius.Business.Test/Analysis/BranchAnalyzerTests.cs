@@ -4,7 +4,7 @@ using LibGit2Sharp;
 using Moq;
 using DomainBranch = Lanius.Business.Analysis.Models.Branch;
 
-namespace Lanius.Business.Test.Services;
+namespace Lanius.Business.Test.Analysis;
 
 [TestClass]
 public class BranchAnalyzerTests

@@ -2,10 +2,10 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Lanius.Business.Analysis.Models;
 using Lanius.Business.Analysis.Services;
-using Lanius.Business.Models;
+using Lanius.Business.Replay.Models;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Lanius.Business.Services;
+namespace Lanius.Business.Replay.Services;
 
 /// <summary>
 /// Service for replaying commit history using Rx.NET observables.

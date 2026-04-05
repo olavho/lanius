@@ -13,4 +13,9 @@
     <PackageReference Include="System.Reactive" Version="6.1.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Models\" />
+    <Folder Include="Services\" />
+  </ItemGroup>
+
 </Project>

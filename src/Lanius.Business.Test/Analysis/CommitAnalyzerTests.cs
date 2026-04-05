@@ -6,7 +6,7 @@ using Moq;
 using DomainCommit = Lanius.Business.Analysis.Models.Commit;
 using DomainDiffStats = Lanius.Business.Analysis.Models.DiffStats;
 
-namespace Lanius.Business.Test.Services;
+namespace Lanius.Business.Test.Analysis;
 
 [TestClass]
 public class CommitAnalyzerTests

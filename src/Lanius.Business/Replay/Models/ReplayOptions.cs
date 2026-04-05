@@ -1,4 +1,4 @@
-﻿namespace Lanius.Business.Models;
+namespace Lanius.Business.Replay.Models;
 
 /// <summary>
 /// Configuration for commit replay playback.

@@ -11,7 +11,6 @@ namespace Lanius.Business.Test.Layout;
 public class CalendarLayoutEngineTests
 {
     private Mock<ICommitAnalyzer> _mockCommitAnalyzer = null!;
-    private Mock<IBranchAnalyzer> _mockBranchAnalyzer = null!;
     private Mock<ILogger<CalendarLayoutEngine>> _mockLogger = null!;
     private CalendarLayoutEngine _layoutEngine = null!;
 
@@ -19,12 +18,10 @@ public class CalendarLayoutEngineTests
     public void Setup()
     {
         _mockCommitAnalyzer = new Mock<ICommitAnalyzer>();
-        _mockBranchAnalyzer = new Mock<IBranchAnalyzer>();
         _mockLogger = new Mock<ILogger<CalendarLayoutEngine>>();
 
         _layoutEngine = new CalendarLayoutEngine(
             _mockCommitAnalyzer.Object,
-            _mockBranchAnalyzer.Object,
             _mockLogger.Object
         );
     }
