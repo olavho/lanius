@@ -351,7 +351,8 @@ public class CalendarLayoutEngineTests
                 It.IsAny<string>(),
                 null,
                 null,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync([]);
 
         var options = new LayoutOptions
@@ -388,7 +389,8 @@ public class CalendarLayoutEngineTests
                 It.IsAny<string>(),
                 null,
                 null,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions
@@ -425,7 +427,8 @@ public class CalendarLayoutEngineTests
                 It.IsAny<string>(),
                 null,
                 null,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions
@@ -464,7 +467,8 @@ public class CalendarLayoutEngineTests
                 It.IsAny<string>(),
                 null,
                 null,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions
@@ -645,7 +649,7 @@ public class CalendarLayoutEngineTests
 
         _mockCommitAnalyzer
             .Setup(x => x.GetCommitsChronologicallyAsync(
-                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>(), It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions
@@ -682,7 +686,7 @@ public class CalendarLayoutEngineTests
 
         _mockCommitAnalyzer
             .Setup(x => x.GetCommitsChronologicallyAsync(
-                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>(), It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions
@@ -716,7 +720,7 @@ public class CalendarLayoutEngineTests
 
         _mockCommitAnalyzer
             .Setup(x => x.GetCommitsChronologicallyAsync(
-                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>(), It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions
@@ -802,7 +806,7 @@ public class CalendarLayoutEngineTests
 
         _mockCommitAnalyzer
             .Setup(x => x.GetCommitsChronologicallyAsync(
-                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>(), It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions { Mode = LayoutMode.Calendar, CanvasWidth = 2000, CanvasHeight = 600 };
@@ -822,7 +826,7 @@ public class CalendarLayoutEngineTests
 
         _mockCommitAnalyzer
             .Setup(x => x.GetCommitsChronologicallyAsync(
-                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), null, null, It.IsAny<CancellationToken>(), It.IsAny<IProgress<(int processed, int total)>?>()))
             .ReturnsAsync(commits);
 
         var options = new LayoutOptions { Mode = LayoutMode.Calendar, CanvasWidth = 2000, CanvasHeight = 600 };

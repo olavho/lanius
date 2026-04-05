@@ -70,7 +70,8 @@ public interface ICommitAnalyzer
         string repositoryId,
         DateTimeOffset? startDate = null,
         DateTimeOffset? endDate = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<(int processed, int total)>? progress = null);
 
     /// <summary>
     /// Calculate diff statistics for a commit.

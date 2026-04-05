@@ -44,7 +44,7 @@ public class LogicalLayoutEngine(
             return CreateEmptyResult(options.Mode);
         }
 
-        progress?.Report(new LayoutProgress(50, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
+        progress?.Report(new LayoutProgress(60, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
 
         // Assign Y lanes to branches
         var branchLanes = AssignBranchLanes(branches, options);

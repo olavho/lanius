@@ -31,9 +31,16 @@ public class CalendarLayoutEngine(
         progress?.Report(new LayoutProgress(0, "Loading commits...", 0, 0));
 
         // Load all commits (calendar view shows all branches aggregated)
+        var loadProgress = new Progress<(int processed, int total)>(p =>
+        {
+            if (p.total == 0) return;
+            var pct = (int)((p.processed / (double)p.total) * 30);
+            progress?.Report(new LayoutProgress(pct, $"Loading commits ({p.processed}/{p.total})...", p.processed, p.total));
+        });
         var allCommits = await commitAnalyzer.GetCommitsChronologicallyAsync(
             repositoryId,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            progress: loadProgress);
 
         if (allCommits.Count == 0)
         {

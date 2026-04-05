@@ -62,17 +62,21 @@ public class LayoutController(
                 _ => throw new ArgumentException($"Unsupported layout mode: {mode}")
             };
 
-            // Create progress reporter that sends updates via SignalR
+            // Collect in-flight SignalR sends so they can be awaited before the HTTP
+            // response is sent. Without this, fire-and-forget sends may arrive after
+            // the frontend calls hideLayoutProgress() on the HTTP response.
+            var progressTasks = new System.Collections.Concurrent.ConcurrentBag<Task>();
             var progress = new Progress<LayoutProgress>(p =>
             {
-                hubContext.Clients.Group($"repo:{repositoryId}")
+                var task = hubContext.Clients.Group($"repo:{repositoryId}")
                     .SendAsync("LayoutProgress", new
                     {
                         percentage = p.Percentage,
                         operation = p.Operation,
                         processedItems = p.ProcessedItems,
                         totalItems = p.TotalItems
-                    }, cancellationToken);
+                    }, CancellationToken.None);
+                progressTasks.Add(task);
             });
 
             var result = await layoutEngine.CalculateLayoutAsync(
@@ -80,6 +84,9 @@ public class LayoutController(
                 options,
                 progress: progress,
                 cancellationToken);
+
+            if (!progressTasks.IsEmpty)
+                await Task.WhenAll(progressTasks);
 
             var response = new LayoutResponse
             {

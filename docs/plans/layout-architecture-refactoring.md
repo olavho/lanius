@@ -379,55 +379,38 @@ function onZoomChange(zoomLevel) {
 ### Phase 5: Progress Indicators
 **Goal**: Show progress during layout calculations
 
-**Status**: ✅ **INTERFACE COMPLETE** (Implementation in Phase 1)
+**Status**: ✅ **COMPLETE**
 
 **Tasks**:
 1. ✅ Add `IProgress<LayoutProgress>` to layout engine methods
-2. ✅ Report progress percentage and current operation (in LogicalLayoutEngine)
-3. ❌ Add SignalR hub method for layout progress updates
-4. ❌ Display progress bar in UI
-5. ❌ Show operation details ("Analyzing 12,000 commits...")
+2. ✅ Report progress percentage and current operation (in both layout engines)
+3. ✅ SignalR progress delivery via `LayoutController` (`repo:{id}` group)
+4. ✅ Progress bar UI (HTML/CSS/JS) with operation text
+5. ✅ Operation details (e.g., "Loading commits (1240/2500)...")
 
-**Backend**:
-```csharp
-public interface ILayoutEngine
-{
-    Task<LayoutResult> CalculateLayoutAsync(
-        RepositoryInfo repo,
-        LayoutOptions options,
-        IProgress<LayoutProgress>? progress = null,
-        CancellationToken cancellationToken = default
-    );
-}
+**Progress Pipelines**:
+- **Logical**: 0% start → 10% branches loaded → 10–20% hierarchy → 20–60% batch commits → 60% loaded → 80% edges → 100% complete
+- **Calendar**: 0–30% per-commit loading → 30% grouping → 60% positions → 100% complete
 
-public record LayoutProgress(
-    int Percentage,
-    string Operation,
-    int ProcessedItems,
-    int TotalItems
-);
-```
+**Bug Fixes Applied**:
+- `BranchHierarchyAnalyzer`: Added final 100% event after loop (was stuck at 98% → scaled to 19%)
+- `LogicalLayoutEngine`: Fixed post-batch regression (50% → 60%)
+- `LayoutController`: Replaced fire-and-forget SignalR with `ConcurrentBag<Task>` + `Task.WhenAll` before HTTP response
+- `ICommitAnalyzer.GetCommitsChronologicallyAsync`: Added `IProgress<(int processed, int total)>?` as 5th optional param; `CommitAnalyzer` loops with `reportInterval = max(1, total/100)`
 
-**SignalR**:
-```csharp
-// In RepositoryHub.cs
-public async Task ReportLayoutProgress(string sessionId, LayoutProgress progress)
-{
-    await Clients.All.SendAsync("LayoutProgress", sessionId, progress);
-}
-```
+**Files Modified**:
+- `src/Lanius.Business/Layout/Services/BranchHierarchyAnalyzer.cs` - Final 100% event
+- `src/Lanius.Business/Layout/Services/LogicalLayoutEngine.cs` - Progress pipeline 0–100%
+- `src/Lanius.Business/Layout/Services/CalendarLayoutEngine.cs` - `loadProgress` wiring 0–30%
+- `src/Lanius.Business/Services/ICommitAnalyzer.cs` - 5th optional progress param
+- `src/Lanius.Business/Services/CommitAnalyzer.cs` - Progress-aware commit loop
+- `src/Lanius.Api/Controllers/LayoutController.cs` - Awaited SignalR sends before HTTP response
+- `src/Lanius.Web/wwwroot/index.html` - Progress bar UI
+- `src/Lanius.Web/wwwroot/js/app.js` - `handleLayoutProgress`, `showLayoutProgress`, `hideLayoutProgress`
+- `src/Lanius.Business.Test/Layout/CalendarLayoutEngineTests.cs` - 9 mock setups updated for 5-arg signature
 
-**Frontend**:
-```javascript
-// In app.js
-connection.on('LayoutProgress', (sessionId, progress) => {
-    updateProgressBar(progress.percentage);
-    updateProgressText(`${progress.operation} (${progress.processedItems}/${progress.totalItems})`);
-});
-```
-
-**Duration**: 2-3 days  
-**Risk**: Low (straightforward progress reporting)
+**Duration**: ~1 day (actual)  
+**Risk**: ✅ Resolved
 
 ---
 
@@ -435,6 +418,9 @@ connection.on('LayoutProgress', (sessionId, progress) => {
 **Goal**: Refactor to domain-driven structure with co-located models
 
 **Status**: ⚠️ **PARTIALLY COMPLETE** (Layout domain created, others pending)
+
+**Pre-migration cleanup**:
+- ❌ Delete empty `src/Lanius.Business/Services/RepositoryService_new.cs` artifact
 
 **Migration Strategy**:
 1. ✅ Create new folder structure (Layout/ created, others pending)

@@ -315,6 +315,7 @@ async function loadRepository() {
 
     try {
         updateStatus('repo-status', 'Loading repository layout...');
+        showLayoutProgress('Loading commits...');
 
         // Subscribe to repository progress updates via SignalR
         if (state.connection && state.connection.state === signalR.HubConnectionState.Connected) {
@@ -378,11 +379,13 @@ async function loadRepository() {
         console.log('Calling renderVisualization with layout data');
         renderVisualization();
 
-        updateCanvasInfo(`${layout.totalCommits} commits (${layout.totalBranches} branches)`);
+        hideLayoutProgress();
+        updateCanvasInfo
         updateStatus('repo-status', `Loaded layout: ${layout.totalCommits} commits, ${layout.totalBranches} branches`);
 
     } catch (err) {
         console.error('Load error:', err);
+        hideLayoutProgress();
         updateStatus('repo-status', `Error: ${err.message}`, true);
     }
 }
@@ -588,15 +591,32 @@ function handleLayoutProgress(progress) {
 
     const { percentage, operation, processedItems, totalItems } = progress;
 
-    // Build progress message
-    let message = operation;
-    if (totalItems > 0) {
-        message = `${operation}: ${processedItems}/${totalItems} (${percentage}%)`;
-    } else {
-        message = `${operation} (${percentage}%)`;
-    }
+    const label = totalItems > 0
+        ? `${operation} — ${processedItems}/${totalItems}`
+        : operation;
 
-    updateStatus('repo-status', message);
+    updateLayoutProgress(percentage, label);
+    updateStatus('repo-status', `${label} (${percentage}%)`);
+
+    if (percentage >= 100) {
+        setTimeout(hideLayoutProgress, 400);
+    }
+}
+
+// Layout Progress Bar
+function showLayoutProgress(initialLabel = '') {
+    document.getElementById('layout-progress-fill').style.width = '0%';
+    document.getElementById('layout-progress-label').textContent = initialLabel;
+    document.getElementById('layout-progress').classList.remove('hidden');
+}
+
+function updateLayoutProgress(percentage, label) {
+    document.getElementById('layout-progress-fill').style.width = `${percentage}%`;
+    document.getElementById('layout-progress-label').textContent = label;
+}
+
+function hideLayoutProgress() {
+    document.getElementById('layout-progress').classList.add('hidden');
 }
 
 // UI Helper Functions

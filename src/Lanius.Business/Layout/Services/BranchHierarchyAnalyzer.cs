@@ -123,6 +123,7 @@ public class BranchHierarchyAnalyzer(
             processed++;
         }
 
+        progress?.Report(new LayoutProgress(100, "Branch hierarchy analysis complete", branches.Count, branches.Count));
         logger.LogInformation("Branch hierarchy analysis complete. Total branches: {Count}", result.Count);
         return result;
     }

@@ -50,7 +50,8 @@ public class CommitAnalyzer(
         string repositoryId,
         DateTimeOffset? startDate = null,
         DateTimeOffset? endDate = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<(int processed, int total)>? progress = null)
     {
         return await Task.Run(() =>
         {
@@ -66,7 +67,20 @@ public class CommitAnalyzer(
                 .OrderBy(c => c.Author.When)
                 .ToList();
 
-            return commits.Select(c => MapCommit(c, repo)).ToList() as IReadOnlyList<DomainCommit>;
+            if (progress == null)
+                return commits.Select(c => MapCommit(c, repo)).ToList() as IReadOnlyList<DomainCommit>;
+
+            var total = commits.Count;
+            var reportInterval = Math.Max(1, total / 100);
+            var result = new List<DomainCommit>(total);
+            for (int i = 0; i < total; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                result.Add(MapCommit(commits[i], repo));
+                if (i % reportInterval == 0 || i == total - 1)
+                    progress.Report((i + 1, total));
+            }
+            return result as IReadOnlyList<DomainCommit>;
         }, cancellationToken);
     }
 
