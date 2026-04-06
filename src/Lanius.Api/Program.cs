@@ -18,6 +18,7 @@ builder.Services.AddControllers()
 
 // Add SignalR for real-time updates
 builder.Services.AddSignalR();
+builder.Services.AddMemoryCache();
 
 // Configure OpenAPI
 builder.Services.AddOpenApi();

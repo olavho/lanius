@@ -3,6 +3,7 @@ using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
 using Lanius.Business.Storage.Services;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -24,6 +25,7 @@ public class LogicalLayoutEngineTests
     private Mock<IBranchHierarchyAnalyzer> _mockBranchHierarchyAnalyzer = null!;
     private Mock<IRepositoryStorageService> _mockRepositoryService = null!;
     private Mock<ILogger<LogicalLayoutEngine>> _mockLogger = null!;
+    private IMemoryCache _memoryCache = null!;
     private LogicalLayoutEngine _layoutEngine = null!;
 
     public TestContext TestContext { get; set; }
@@ -58,11 +60,13 @@ public class LogicalLayoutEngineTests
             .Setup(x => x.GetRepositoryPath(It.IsAny<string>()))
             .Returns(@"C:\temp\test-repo");
 
+        _memoryCache = new MemoryCache(new MemoryCacheOptions());
         _layoutEngine = new LogicalLayoutEngine(
             _mockCommitAnalyzer.Object,
             _mockBranchAnalyzer.Object,
             _mockBranchHierarchyAnalyzer.Object,
             _mockRepositoryService.Object,
+            _memoryCache,
             _mockLogger.Object);
     }
 
