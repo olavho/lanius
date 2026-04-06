@@ -2,8 +2,11 @@ using Lanius.Business.Analysis.Models;
 using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Storage.Services;
+using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using DomainBranch = Lanius.Business.Analysis.Models.Branch;
+using DomainCommit = Lanius.Business.Analysis.Models.Commit;
 
 namespace Lanius.Business.Layout.Services;
 
@@ -92,7 +95,7 @@ public class LogicalLayoutEngine(
         };
     }
 
-    private async Task<List<Branch>> LoadBranchesAsync(
+    private async Task<List<DomainBranch>> LoadBranchesAsync(
         string repositoryId,
         string? branchFilter,
         CancellationToken cancellationToken)
@@ -101,7 +104,7 @@ public class LogicalLayoutEngine(
         // (e.g. pattern "main" should match remote "origin/main").
         var allBranches = (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken)).ToList();
 
-        List<Branch> branches;
+        List<DomainBranch> branches;
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
             branches = allBranches;
@@ -131,60 +134,103 @@ public class LogicalLayoutEngine(
         return remoteBranches;
     }
 
-    private async Task<Dictionary<string, List<Commit>>> LoadAllCommitsAsync(
+    private async Task<Dictionary<string, List<DomainCommit>>> LoadAllCommitsAsync(
         string repositoryId,
-        List<Branch> branches,
+        List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Loading commits for {BranchCount} branches using branch hierarchy optimization", branches.Count);
-
-        // Phase 1: Analyze branch hierarchy (10-20% of progress)
         progress?.Report(new LayoutProgress(10, "Analyzing branch hierarchy...", 0, branches.Count));
 
         var hierarchyAnalyzer = new BranchHierarchyAnalyzer(
             repositoryStorageService,
             loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
 
-        var hierarchySw = Stopwatch.StartNew();
-        var hierarchyInfo = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
-            repositoryId,
-            branches,
-            new Progress<LayoutProgress>(p =>
-            {
-                // Scale hierarchy progress from 10% to 20%
-                var scaledPercentage = 10 + (int)(p.Percentage * 0.1);
-                progress?.Report(new LayoutProgress(
-                    scaledPercentage,
-                    $"Analyzing hierarchy: {p.Operation}",
-                    p.ProcessedItems,
-                    p.TotalItems));
-            }),
-            cancellationToken);
-
-        _logger.LogInformation("[PERF] BranchHierarchyAnalysis: {ElapsedMs}ms ({BranchCount} branches)",
-            hierarchySw.ElapsedMilliseconds, hierarchyInfo.Count);
-
-        // Phase 2: Load commits per branch (20-60% of progress)
-        // Early return for 0 branches (empty repository)
-        if (hierarchyInfo.Count == 0)
+        var hierarchyProgress = new Progress<LayoutProgress>(p =>
         {
-            _logger.LogInformation("No branches to load commits from");
-            return [];
+            var scaledPercentage = 10 + (int)(p.Percentage * 0.1);
+            progress?.Report(new LayoutProgress(scaledPercentage, $"Analyzing hierarchy: {p.Operation}", p.ProcessedItems, p.TotalItems));
+        });
+
+        // B1: open the repository once and share it between hierarchy analysis and commit batch loading.
+        // Falls back to separate opens when RepositoryExists returns false (e.g. in unit tests with mocked services).
+        if (repositoryStorageService.RepositoryExists(repositoryId) && commitAnalyzer is CommitAnalyzer concreteAnalyzer)
+        {
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    using var repo = new Repository(repositoryStorageService.GetRepositoryPath(repositoryId));
+
+                    var hierarchyInfo = hierarchyAnalyzer.AnalyzeBranchHierarchyWithRepository(repo, branches, hierarchyProgress);
+                    _logger.LogInformation("[PERF] BranchHierarchyAnalysis: {ElapsedMs}ms ({BranchCount} branches)",
+                        sw.ElapsedMilliseconds, hierarchyInfo.Count);
+
+                    if (hierarchyInfo.Count == 0)
+                    {
+                        _logger.LogInformation("No branches to load commits from");
+                        return new Dictionary<string, List<DomainCommit>>();
+                    }
+
+                    _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
+
+                    var hierarchyDict = hierarchyInfo.ToDictionary(b => b.Name);
+                    var batchRequest = hierarchyInfo.Select(b => (b.Name, b.MergeBaseSha)).ToList();
+                    var batchProgress = CreateBatchProgress(hierarchyDict, progress);
+
+                    sw.Restart();
+                    var batchResult = concreteAnalyzer.GetCommitsBatchFromRepo(repo, batchRequest, batchProgress, cancellationToken);
+                    var result = batchResult.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToList());
+                    var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
+                    _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches, {CommitCount} unique commits)",
+                        sw.ElapsedMilliseconds, branches.Count, totalCommits);
+                    return result;
+                }, cancellationToken);
+            }
+            catch (RepositoryNotFoundException ex)
+            {
+                _logger.LogDebug("Repository not accessible for shared session ({Error}), falling back to individual opens", ex.Message);
+            }
         }
 
-        _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
+        // Fallback: separate async calls — used in tests with mocked ICommitAnalyzer / IRepositoryStorageService
+        {
+            var hierarchySw = Stopwatch.StartNew();
+            var hierarchyInfo = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
+                repositoryId, branches, hierarchyProgress, cancellationToken);
+            _logger.LogInformation("[PERF] BranchHierarchyAnalysis: {ElapsedMs}ms ({BranchCount} branches)",
+                hierarchySw.ElapsedMilliseconds, hierarchyInfo.Count);
 
-        // Build batch request: each entry is (branchName, mergeBaseSha)
-        var batchRequest = hierarchyInfo
-            .Select(b => (b.Name, b.MergeBaseSha))
-            .ToList();
+            if (hierarchyInfo.Count == 0)
+            {
+                _logger.LogInformation("No branches to load commits from");
+                return [];
+            }
 
-        // Build dictionary for O(1) progress callback lookups (avoids O(n) First() per event)
-        var hierarchyDict = hierarchyInfo.ToDictionary(b => b.Name);
+            _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
 
-        // PERFORMANCE FIX: single repository open for all branches
-        var batchProgress = new Progress<(int processed, int total, string currentBranch)>(p =>
+            var hierarchyDict = hierarchyInfo.ToDictionary(b => b.Name);
+            var batchRequest = hierarchyInfo.Select(b => (b.Name, b.MergeBaseSha)).ToList();
+            var batchProgress = CreateBatchProgress(hierarchyDict, progress);
+
+            var batchSw = Stopwatch.StartNew();
+            var batchResult = await commitAnalyzer.GetCommitsBatchAsync(
+                repositoryId, batchRequest, batchProgress, cancellationToken);
+            var result = batchResult.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToList());
+            var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
+            _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches, {CommitCount} unique commits)",
+                batchSw.ElapsedMilliseconds, branches.Count, totalCommits);
+            return result;
+        }
+    }
+
+    private IProgress<(int processed, int total, string currentBranch)> CreateBatchProgress(
+        Dictionary<string, BranchHierarchyInfo> hierarchyDict,
+        IProgress<LayoutProgress>? progress)
+    {
+        return new Progress<(int processed, int total, string currentBranch)>(p =>
         {
             if (p.total == 0) return;
             int percentage = 20 + (int)((p.processed / (double)p.total) * 40);
@@ -201,27 +247,10 @@ public class LogicalLayoutEngine(
                     info.Name, info.Tier, info.MergeBaseSha?[..8] ?? "none", info.CommitCount);
             }
         });
-
-        var batchSw = Stopwatch.StartNew();
-        var batchResult = await commitAnalyzer.GetCommitsBatchAsync(
-            repositoryId,
-            batchRequest,
-            batchProgress,
-            cancellationToken);
-
-        var result = batchResult.ToDictionary(
-            kvp => kvp.Key,
-            kvp => kvp.Value.ToList());
-
-        var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
-        _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches, {CommitCount} unique commits)",
-            batchSw.ElapsedMilliseconds, branches.Count, totalCommits);
-
-        return result;
     }
 
     private static Dictionary<string, double> AssignBranchLanes(
-        List<Branch> branches,
+        List<DomainBranch> branches,
         LayoutOptions options)
     {
         var lanes = new Dictionary<string, double>();
@@ -237,8 +266,8 @@ public class LogicalLayoutEngine(
     }
 
     private static List<LayoutNode> CalculateNodePositions(
-        List<Commit> allCommits,
-        Dictionary<string, List<Commit>> branchCommits,
+        List<DomainCommit> allCommits,
+        Dictionary<string, List<DomainCommit>> branchCommits,
         Dictionary<string, double> branchLanes,
         LayoutOptions options)
     {
@@ -313,7 +342,7 @@ public class LogicalLayoutEngine(
 
     private static List<LayoutEdge> CalculateEdges(
         List<LayoutNode> nodes,
-        Dictionary<string, List<Commit>> branchCommits)
+        Dictionary<string, List<DomainCommit>> branchCommits)
     {
         var edges = new List<LayoutEdge>();
         var nodeDict = nodes.ToDictionary(n => n.CommitId);

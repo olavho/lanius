@@ -66,7 +66,7 @@ public class BranchHierarchyAnalyzer(
         return result;
     }
 
-    private List<BranchHierarchyInfo> AnalyzeBranchHierarchyWithRepository(
+    internal List<BranchHierarchyInfo> AnalyzeBranchHierarchyWithRepository(
         Repository repo,
         List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress)
@@ -183,14 +183,12 @@ public class BranchHierarchyAnalyzer(
                     branch.FriendlyName, candidate.Name, mergeBaseSw.ElapsedMilliseconds);
                 if (mergeBase != null)
                 {
-                    // Count commits since merge base using LibGit2Sharp's filtering
-                    int commitCount = 0;
-                    foreach (var commit in branch.Commits)
+                    // B2: use CommitFilter to count commits since merge base
+                    int commitCount = repo.Commits.QueryBy(new CommitFilter
                     {
-                        if (commit.Sha == mergeBase.Sha)
-                            break; // Stop at merge base
-                        commitCount++;
-                    }
+                        IncludeReachableFrom = branch.Tip,
+                        ExcludeReachableFrom = mergeBase
+                    }).Count();
 
                     logger.LogDebug("Found merge base for {BranchName} from {ParentName}: {MergeBaseSha}, {CommitCount} commits since branch point",
                         branch.FriendlyName,

@@ -234,25 +234,37 @@ public class CommitAnalyzer(
     {
         return Task.Run(() =>
         {
-            var totalSw = Stopwatch.StartNew();
             var sw = Stopwatch.StartNew();
             using var repo = OpenRepository(repositoryId);
             logger.LogInformation("[PERF] OpenRepository (batch {BranchCount} branches): {ElapsedMs}ms", branches.Count, sw.ElapsedMilliseconds);
-
-            var result = new Dictionary<string, IReadOnlyList<DomainCommit>>(branches.Count);
-
-            for (int i = 0; i < branches.Count; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var (branchName, sinceCommitSha) = branches[i];
-                progress?.Report((i, branches.Count, branchName));
-                result[branchName] = GetCommitsSinceInternal(repo, branchName, sinceCommitSha);
-            }
-
-            progress?.Report((branches.Count, branches.Count, string.Empty));
-            logger.LogInformation("[PERF] GetCommitsBatch total: {ElapsedMs}ms ({BranchCount} branches)", totalSw.ElapsedMilliseconds, branches.Count);
-            return result;
+            return GetCommitsBatchFromRepo(repo, branches, progress, cancellationToken);
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads commits for multiple branches using an already-open repository.
+    /// Called directly by LogicalLayoutEngine (B1) to share a single repository instance.
+    /// </summary>
+    internal Dictionary<string, IReadOnlyList<DomainCommit>> GetCommitsBatchFromRepo(
+        Repository repo,
+        IReadOnlyList<(string branchName, string? sinceCommitSha)> branches,
+        IProgress<(int processed, int total, string currentBranch)>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var totalSw = Stopwatch.StartNew();
+        var result = new Dictionary<string, IReadOnlyList<DomainCommit>>(branches.Count);
+
+        for (int i = 0; i < branches.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (branchName, sinceCommitSha) = branches[i];
+            progress?.Report((i, branches.Count, branchName));
+            result[branchName] = GetCommitsSinceInternal(repo, branchName, sinceCommitSha);
+        }
+
+        progress?.Report((branches.Count, branches.Count, string.Empty));
+        logger.LogInformation("[PERF] GetCommitsBatch total: {ElapsedMs}ms ({BranchCount} branches)", totalSw.ElapsedMilliseconds, branches.Count);
+        return result;
     }
 
     private IReadOnlyList<DomainCommit> GetCommitsSinceInternal(
@@ -263,28 +275,32 @@ public class CommitAnalyzer(
         var branch = repo.Branches[branchName]
             ?? throw new InvalidOperationException($"Branch not found: {branchName}");
 
-        IEnumerable<GitCommit> commits;
         var sw = Stopwatch.StartNew();
 
-        if (sinceCommitSha == null)
+        // B2: use native CommitFilter to bound the walk at the merge base
+        var filter = new CommitFilter
         {
-            // No merge base - return all commits
-            var commitList = branch.Commits.ToList();
-            logger.LogInformation("[PERF] Enumerate {BranchName} (full): {ElapsedMs}ms ({CommitCount} commits)",
-                branchName, sw.ElapsedMilliseconds, commitList.Count);
-            commits = commitList;
-        }
-        else
+            IncludeReachableFrom = branch.Tip,
+            SortBy = CommitSortStrategies.Topological
+        };
+        if (sinceCommitSha != null)
         {
-            // Lazy: stop at merge base — enumeration happens during mapping below
-            commits = branch.Commits.TakeWhile(c => c.Sha != sinceCommitSha);
+            var mergeBase = repo.Lookup<GitCommit>(sinceCommitSha);
+            if (mergeBase != null)
+                filter.ExcludeReachableFrom = mergeBase;
+            else
+                logger.LogWarning("Merge base {Sha} not found, loading full branch history for {BranchName}",
+                    sinceCommitSha[..8], branchName);
         }
 
-        // Map to domain commits (for TakeWhile path, this also drives enumeration)
+        var commits = repo.Commits.QueryBy(filter).ToList();
+        logger.LogInformation("[PERF] Enumerate {BranchName}: {ElapsedMs}ms ({CommitCount} commits, mergeBase={MergeBase})",
+            branchName, sw.ElapsedMilliseconds, commits.Count, sinceCommitSha?[..8] ?? "none");
+
         sw.Restart();
         var result = commits.Select(c => MapCommitFast(c, branchName)).ToList() as IReadOnlyList<DomainCommit>;
-        logger.LogInformation("[PERF] Map {BranchName}: {ElapsedMs}ms ({CommitCount} commits, mergeBase={MergeBase})",
-            branchName, sw.ElapsedMilliseconds, result.Count, sinceCommitSha?[..8] ?? "none");
+        logger.LogInformation("[PERF] Map {BranchName}: {ElapsedMs}ms ({CommitCount} commits)",
+            branchName, sw.ElapsedMilliseconds, result.Count);
 
         return result;
     }
