@@ -734,5 +734,134 @@ public class LogicalLayoutEngineTests
             Assert.AreEqual(expectedX, node.X, $"Node {node.CommitId}: X should equal MarginX + GridColumn * ColumnWidth");
         }
     }
+
+    // ── Phase 3: Branch sorting tests ────────────────────────────────────────
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MainBranch_AlwaysAssignedRowZero()
+    {
+        // Arrange: feature/aaa sorts before main alphabetically; tier must override that
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch    = new Branch { Name = "origin/main",        FullName = "refs/remotes/origin/main",        TipSha = "m1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature/aaa", FullName = "refs/remotes/origin/feature/aaa", TipSha = "f1", IsRemote = true };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"]        = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "main", ParentShas = [] }],
+                ["origin/feature/aaa"] = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "feat", ParentShas = [] }]
+            });
+
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",        Tier = BranchTier.Main,    MergeBaseSha = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/aaa", Tier = BranchTier.Feature, MergeBaseSha = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mainNode    = result.Nodes.First(n => n.BranchName == "origin/main");
+        var featureNode = result.Nodes.First(n => n.BranchName == "origin/feature/aaa");
+
+        Assert.AreEqual(0, mainNode.GridRow,    "origin/main must always be row 0 regardless of alphabetical order");
+        Assert.AreEqual(1, featureNode.GridRow, "feature branch should be row 1");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchesSortedBySplitTimestampAscending()
+    {
+        // Arrange: release split before feature — release must occupy the lower row
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var t0 = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var mainBranch    = new Branch { Name = "origin/main",        FullName = "refs/remotes/origin/main",        TipSha = "m1", IsRemote = true };
+        var releaseBranch = new Branch { Name = "origin/release/1.0", FullName = "refs/remotes/origin/release/1.0", TipSha = "r1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature/x",   FullName = "refs/remotes/origin/feature/x",   TipSha = "f1", IsRemote = true };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, releaseBranch, featureBranch]);
+
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"]        = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,            Message = "main",    ParentShas = [] }],
+                ["origin/release/1.0"] = [new Commit { Sha = "r1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddMonths(1), Message = "release", ParentShas = [] }],
+                ["origin/feature/x"]   = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddMonths(2), Message = "feat",    ParentShas = [] }]
+            });
+
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",        Tier = BranchTier.Main,    MergeBaseSha = null, SplitTimestamp = null,            CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/release/1.0", Tier = BranchTier.Release, MergeBaseSha = "m1", SplitTimestamp = t0.AddMonths(1), CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/x",   Tier = BranchTier.Feature, MergeBaseSha = "m1", SplitTimestamp = t0.AddMonths(2), CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mainNode    = result.Nodes.First(n => n.BranchName == "origin/main");
+        var releaseNode = result.Nodes.First(n => n.BranchName == "origin/release/1.0");
+        var featureNode = result.Nodes.First(n => n.BranchName == "origin/feature/x");
+
+        Assert.AreEqual(0, mainNode.GridRow,    "main should be row 0");
+        Assert.AreEqual(1, releaseNode.GridRow, "release (earlier split) should be row 1");
+        Assert.AreEqual(2, featureNode.GridRow, "feature (later split) should be row 2");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchesWithoutSplitTimestamp_SortedLastThenAlphabetically()
+    {
+        // Arrange: two feature branches with no split timestamp — go after main, alphabetical order
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch     = new Branch { Name = "origin/main",        FullName = "refs/remotes/origin/main",        TipSha = "m1",  IsRemote = true };
+        var featureABranch = new Branch { Name = "origin/feature/aaa", FullName = "refs/remotes/origin/feature/aaa", TipSha = "fa1", IsRemote = true };
+        var featureBBranch = new Branch { Name = "origin/feature/bbb", FullName = "refs/remotes/origin/feature/bbb", TipSha = "fb1", IsRemote = true };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureABranch, featureBBranch]);
+
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"]        = [new Commit { Sha = "m1",  Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "main", ParentShas = [] }],
+                ["origin/feature/aaa"] = [new Commit { Sha = "fa1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "fa",   ParentShas = [] }],
+                ["origin/feature/bbb"] = [new Commit { Sha = "fb1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(2), Message = "fb",   ParentShas = [] }]
+            });
+
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",        Tier = BranchTier.Main,    MergeBaseSha = null, SplitTimestamp = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/aaa", Tier = BranchTier.Feature, MergeBaseSha = null, SplitTimestamp = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/bbb", Tier = BranchTier.Feature, MergeBaseSha = null, SplitTimestamp = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mainNode     = result.Nodes.First(n => n.BranchName == "origin/main");
+        var featureANode = result.Nodes.First(n => n.BranchName == "origin/feature/aaa");
+        var featureBNode = result.Nodes.First(n => n.BranchName == "origin/feature/bbb");
+
+        Assert.AreEqual(0, mainNode.GridRow,     "main should be row 0");
+        Assert.AreEqual(1, featureANode.GridRow, "feature/aaa should be row 1 (alphabetically before bbb)");
+        Assert.AreEqual(2, featureBNode.GridRow, "feature/bbb should be row 2");
+    }
 }
 

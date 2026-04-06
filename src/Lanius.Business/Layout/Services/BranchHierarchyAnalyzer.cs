@@ -107,7 +107,7 @@ public class BranchHierarchyAnalyzer(
 
             // Find parent branch and merge base
             var branchSw = Stopwatch.StartNew();
-            var (parentName, mergeBaseSha, commitCount) = FindBranchPoint(repo, libgit2Branch, item.Tier, result);
+            var (parentName, mergeBaseSha, splitTimestamp, commitCount) = FindBranchPoint(repo, libgit2Branch, item.Tier, result);
             logger.LogDebug("[PERF] FindBranchPoint {BranchName}: {ElapsedMs}ms (parent={Parent}, commits={Commits})",
                 item.Branch.Name, branchSw.ElapsedMilliseconds, parentName ?? "none", commitCount);
 
@@ -117,6 +117,7 @@ public class BranchHierarchyAnalyzer(
                 Tier = item.Tier,
                 ParentBranchName = parentName,
                 MergeBaseSha = mergeBaseSha,
+                SplitTimestamp = splitTimestamp,
                 CommitCount = commitCount
             };
 
@@ -140,7 +141,7 @@ public class BranchHierarchyAnalyzer(
     /// <summary>
     /// Find branch point (parent branch and merge base commit).
     /// </summary>
-    private (string? ParentName, string? MergeBaseSha, int CommitCount) FindBranchPoint(
+    private (string? ParentName, string? MergeBaseSha, DateTimeOffset? SplitTimestamp, int CommitCount) FindBranchPoint(
         Repository repo,
         Branch branch,
         BranchTier tier,
@@ -152,10 +153,10 @@ public class BranchHierarchyAnalyzer(
             var commitCount = branch.Commits.Count();
             logger.LogDebug("Main branch {BranchName}: {CommitCount} commits (no parent)",
                 branch.FriendlyName, commitCount);
-            return (null, null, commitCount);
+            return (null, null, null, commitCount);
         }
 
-        // Find potential parent branches (already analyzed, lower tier)
+        // Find potential parent branches
         var candidates = analyzedBranches
             .Where(b => b.Tier < tier)
             .OrderBy(b => b.Tier)
@@ -166,7 +167,7 @@ public class BranchHierarchyAnalyzer(
             logger.LogWarning("No parent candidates found for {BranchName} (Tier={Tier}). Using full history.",
                 branch.FriendlyName, tier);
             var commitCount = branch.Commits.Count();
-            return (null, null, commitCount);
+            return (null, null, null, commitCount);
         }
 
         // Try each candidate parent (Main first, then Project, then Release)
@@ -196,7 +197,7 @@ public class BranchHierarchyAnalyzer(
                         mergeBase.Sha[..8],
                         commitCount);
 
-                    return (candidate.Name, mergeBase.Sha, commitCount);
+                    return (candidate.Name, mergeBase.Sha, mergeBase.Committer.When, commitCount);
                 }
             }
             catch (Exception ex)
@@ -209,7 +210,7 @@ public class BranchHierarchyAnalyzer(
         // No merge base found with any parent - use full history
         logger.LogWarning("No merge base found for {BranchName}. Using full history.", branch.FriendlyName);
         var fullCommitCount = branch.Commits.Count();
-        return (null, null, fullCommitCount);
+        return (null, null, null, fullCommitCount);
     }
 
     /// <summary>

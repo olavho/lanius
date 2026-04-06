@@ -51,7 +51,7 @@ public class LogicalLayoutEngine(
 
         // Load all commits for each branch
         sw.Restart();
-        var branchCommits = await LoadAllCommitsAsync(repositoryId, branches, progress, cancellationToken);
+        var (branchCommits, hierarchyInfo) = await LoadAllCommitsAsync(repositoryId, branches, progress, cancellationToken);
         var allCommits = branchCommits.Values.SelectMany(c => c).DistinctBy(c => c.Sha).ToList();
         _logger.LogInformation("[PERF] LoadCommits: {ElapsedMs}ms ({CommitCount} unique commits)", sw.ElapsedMilliseconds, allCommits.Count);
 
@@ -63,7 +63,7 @@ public class LogicalLayoutEngine(
         progress?.Report(new LayoutProgress(60, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
 
         // Assign branch rows (0-based lane indices)
-        var branchRows = AssignBranchLanes(branches, options);
+        var branchRows = AssignBranchLanes(branches, hierarchyInfo, options);
 
         // Calculate node positions
         sw.Restart();
@@ -131,7 +131,7 @@ public class LogicalLayoutEngine(
         return remoteBranches;
     }
 
-    private async Task<Dictionary<string, List<DomainCommit>>> LoadAllCommitsAsync(
+    private async Task<(Dictionary<string, List<DomainCommit>>, List<BranchHierarchyInfo>)> LoadAllCommitsAsync(
         string repositoryId,
         List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress,
@@ -167,7 +167,7 @@ public class LogicalLayoutEngine(
                     if (hierarchyInfo.Count == 0)
                     {
                         _logger.LogInformation("No branches to load commits from");
-                        return new Dictionary<string, List<DomainCommit>>();
+                        return (new Dictionary<string, List<DomainCommit>>(), hierarchyInfo);
                     }
 
                     _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
@@ -192,7 +192,7 @@ public class LogicalLayoutEngine(
                     {
                         var totalCached = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
                         _logger.LogInformation("[PERF] GetCommitsBatch: 0ms (all from cache, {CommitCount} unique commits)", totalCached);
-                        return cachedResult;
+                        return (cachedResult, hierarchyInfo);
                     }
 
                     var batchRequest = uncachedBranches.Select(b => (b.Name, b.MergeBaseSha)).ToList();
@@ -213,7 +213,7 @@ public class LogicalLayoutEngine(
                     var totalCommits = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
                     _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches loaded, {CommitCount} unique commits total)",
                         sw.ElapsedMilliseconds, uncachedBranches.Count, totalCommits);
-                    return cachedResult;
+                    return (cachedResult, hierarchyInfo);
                 }, cancellationToken);
             }
             catch (RepositoryNotFoundException ex)
@@ -233,7 +233,7 @@ public class LogicalLayoutEngine(
             if (hierarchyInfo.Count == 0)
             {
                 _logger.LogInformation("No branches to load commits from");
-                return [];
+                return ([], []);
             }
 
             _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
@@ -258,7 +258,7 @@ public class LogicalLayoutEngine(
             {
                 var totalCached = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
                 _logger.LogInformation("[PERF] GetCommitsBatch: 0ms (all from cache, {CommitCount} unique commits)", totalCached);
-                return cachedResult;
+                return (cachedResult, hierarchyInfo);
             }
 
             var batchRequest = uncachedBranches.Select(b => (b.Name, b.MergeBaseSha)).ToList();
@@ -280,7 +280,7 @@ public class LogicalLayoutEngine(
             var totalCommits = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
             _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches loaded, {CommitCount} unique commits total)",
                 batchSw.ElapsedMilliseconds, uncachedBranches.Count, totalCommits);
-            return cachedResult;
+            return (cachedResult, hierarchyInfo);
         }
     }
 
@@ -309,14 +309,34 @@ public class LogicalLayoutEngine(
 
     private static Dictionary<string, int> AssignBranchLanes(
         List<DomainBranch> branches,
+        IReadOnlyList<BranchHierarchyInfo> hierarchyInfo,
         LayoutOptions options)
     {
-        var rows = new Dictionary<string, int>();
-        int row = 0;
-        foreach (var branch in branches.OrderBy(b => b.Name))
+        var hierarchyMap = hierarchyInfo.ToDictionary(h => h.Name);
+
+        static int GetTier(DomainBranch b, Dictionary<string, BranchHierarchyInfo> map) =>
+            map.TryGetValue(b.Name, out var h) ? (int)h.Tier : (int)BranchTier.Other;
+
+        static DateTimeOffset GetSplitTs(DomainBranch b, Dictionary<string, BranchHierarchyInfo> map) =>
+            map.TryGetValue(b.Name, out var h) && h.SplitTimestamp.HasValue
+                ? h.SplitTimestamp.Value
+                : DateTimeOffset.MaxValue;
+
+        var sorted = branches.ToList();
+        sorted.Sort((a, b) =>
         {
-            rows[branch.Name] = row++;
-        }
+            var tierCmp = GetTier(a, hierarchyMap).CompareTo(GetTier(b, hierarchyMap));
+            if (tierCmp != 0) return tierCmp;
+
+            var tsCmp = GetSplitTs(a, hierarchyMap).CompareTo(GetSplitTs(b, hierarchyMap));
+            if (tsCmp != 0) return tsCmp;
+
+            return string.Compare(a.Name, b.Name, StringComparison.Ordinal);
+        });
+
+        var rows = new Dictionary<string, int>();
+        for (int i = 0; i < sorted.Count; i++)
+            rows[sorted[i].Name] = i;
         return rows;
     }
 
