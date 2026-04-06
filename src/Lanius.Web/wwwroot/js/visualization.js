@@ -753,12 +753,12 @@ const Visualization = (() => {
         edgeGroups.each(function (d) {
             const edge = d3.select(this);
 
-            if (d.points && d.points.length >= 2) {
+            if (d.x1 !== undefined) {
                 edge.append('line')
-                    .attr('x1', d.points[0].item1)
-                    .attr('y1', d.points[0].item2)
-                    .attr('x2', d.points[1].item1)
-                    .attr('y2', d.points[1].item2)
+                    .attr('x1', d.x1)
+                    .attr('y1', d.y1)
+                    .attr('x2', d.x2)
+                    .attr('y2', d.y2)
                     .attr('stroke', getEdgeColor(d.type))
                     .attr('stroke-width', getEdgeWidth(d.type))
                     .attr('stroke-dasharray', getEdgeDashArray(d.type))

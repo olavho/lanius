@@ -2,6 +2,7 @@ using Lanius.Business.Layout.Models;
 using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using DomainBranch = Lanius.Business.Analysis.Models.Branch;
 
 namespace Lanius.Business.Layout.Services;
@@ -11,7 +12,7 @@ namespace Lanius.Business.Layout.Services;
 /// </summary>
 public class BranchHierarchyAnalyzer(
     IRepositoryStorageService repositoryStorageService,
-    ILogger<BranchHierarchyAnalyzer> logger)
+    ILogger<BranchHierarchyAnalyzer> logger) : IBranchHierarchyAnalyzer
 {
     /// <summary>
     /// Analyze branch hierarchy for efficient commit loading.
@@ -38,7 +39,8 @@ public class BranchHierarchyAnalyzer(
             })];
         }
 
-        return await Task.Run(() =>
+        var sw = Stopwatch.StartNew();
+        var result = await Task.Run(() =>
         {
             try
             {
@@ -59,9 +61,12 @@ public class BranchHierarchyAnalyzer(
                 })];
             }
         }, cancellationToken);
+        logger.LogInformation("[PERF] AnalyzeBranchHierarchy: {ElapsedMs}ms ({BranchCount} branches)",
+            sw.ElapsedMilliseconds, result.Count);
+        return result;
     }
 
-    private List<BranchHierarchyInfo> AnalyzeBranchHierarchyWithRepository(
+    internal List<BranchHierarchyInfo> AnalyzeBranchHierarchyWithRepository(
         Repository repo,
         List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress)
@@ -101,7 +106,10 @@ public class BranchHierarchyAnalyzer(
             }
 
             // Find parent branch and merge base
+            var branchSw = Stopwatch.StartNew();
             var (parentName, mergeBaseSha, commitCount) = FindBranchPoint(repo, libgit2Branch, item.Tier, result);
+            logger.LogDebug("[PERF] FindBranchPoint {BranchName}: {ElapsedMs}ms (parent={Parent}, commits={Commits})",
+                item.Branch.Name, branchSw.ElapsedMilliseconds, parentName ?? "none", commitCount);
 
             var hierarchyInfo = new BranchHierarchyInfo
             {
@@ -169,17 +177,18 @@ public class BranchHierarchyAnalyzer(
 
             try
             {
+                var mergeBaseSw = Stopwatch.StartNew();
                 var mergeBase = repo.ObjectDatabase.FindMergeBase(branch.Tip, parentBranch.Tip);
+                logger.LogDebug("[PERF] FindMergeBase {Branch} vs {Parent}: {ElapsedMs}ms",
+                    branch.FriendlyName, candidate.Name, mergeBaseSw.ElapsedMilliseconds);
                 if (mergeBase != null)
                 {
-                    // Count commits since merge base using LibGit2Sharp's filtering
-                    int commitCount = 0;
-                    foreach (var commit in branch.Commits)
+                    // B2: use CommitFilter to count commits since merge base
+                    int commitCount = repo.Commits.QueryBy(new CommitFilter
                     {
-                        if (commit.Sha == mergeBase.Sha)
-                            break; // Stop at merge base
-                        commitCount++;
-                    }
+                        IncludeReachableFrom = branch.Tip,
+                        ExcludeReachableFrom = mergeBase
+                    }).Count();
 
                     logger.LogDebug("Found merge base for {BranchName} from {ParentName}: {MergeBaseSha}, {CommitCount} commits since branch point",
                         branch.FriendlyName,

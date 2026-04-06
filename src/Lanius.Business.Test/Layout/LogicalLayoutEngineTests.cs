@@ -3,6 +3,7 @@ using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Layout.Services;
 using Lanius.Business.Storage.Services;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -21,9 +22,10 @@ public class LogicalLayoutEngineTests
 {
     private Mock<ICommitAnalyzer> _mockCommitAnalyzer = null!;
     private Mock<IBranchAnalyzer> _mockBranchAnalyzer = null!;
+    private Mock<IBranchHierarchyAnalyzer> _mockBranchHierarchyAnalyzer = null!;
     private Mock<IRepositoryStorageService> _mockRepositoryService = null!;
-    private Mock<ILoggerFactory> _mockLoggerFactory = null!;
     private Mock<ILogger<LogicalLayoutEngine>> _mockLogger = null!;
+    private IMemoryCache _memoryCache = null!;
     private LogicalLayoutEngine _layoutEngine = null!;
 
     public TestContext TestContext { get; set; }
@@ -35,23 +37,37 @@ public class LogicalLayoutEngineTests
         _mockBranchAnalyzer = new Mock<IBranchAnalyzer>();
         _mockRepositoryService = new Mock<IRepositoryStorageService>();
         _mockLogger = new Mock<ILogger<LogicalLayoutEngine>>();
-        _mockLoggerFactory = new Mock<ILoggerFactory>();
+        _mockBranchHierarchyAnalyzer = new Mock<IBranchHierarchyAnalyzer>();
 
-        // Setup logger factory to return the mock logger
-        _mockLoggerFactory
-            .Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(_mockLogger.Object);
+        // Default: return simple tier-less hierarchy for any branches passed
+        _mockBranchHierarchyAnalyzer
+            .Setup(x => x.AnalyzeBranchHierarchyAsync(
+                It.IsAny<string>(),
+                It.IsAny<List<Branch>>(),
+                It.IsAny<IProgress<LayoutProgress>?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((string _, List<Branch> branches, IProgress<LayoutProgress>? _, CancellationToken _) =>
+                Task.FromResult(branches.Select(b => new BranchHierarchyInfo
+                {
+                    Name = b.Name,
+                    Tier = BranchTier.Other,
+                    MergeBaseSha = null,
+                    CommitCount = 0
+                }).ToList()));
 
         // Setup repository service to return a valid repository info
         _mockRepositoryService
             .Setup(x => x.GetRepositoryPath(It.IsAny<string>()))
             .Returns(@"C:\temp\test-repo");
 
+        _memoryCache = new MemoryCache(new MemoryCacheOptions());
         _layoutEngine = new LogicalLayoutEngine(
             _mockCommitAnalyzer.Object,
             _mockBranchAnalyzer.Object,
+            _mockBranchHierarchyAnalyzer.Object,
             _mockRepositoryService.Object,
-            _mockLoggerFactory.Object);
+            _memoryCache,
+            _mockLogger.Object);
     }
 
     [TestMethod]
