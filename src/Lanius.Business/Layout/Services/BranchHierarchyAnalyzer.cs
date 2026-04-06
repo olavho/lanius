@@ -2,6 +2,7 @@ using Lanius.Business.Layout.Models;
 using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using DomainBranch = Lanius.Business.Analysis.Models.Branch;
 
 namespace Lanius.Business.Layout.Services;
@@ -38,7 +39,8 @@ public class BranchHierarchyAnalyzer(
             })];
         }
 
-        return await Task.Run(() =>
+        var sw = Stopwatch.StartNew();
+        var result = await Task.Run(() =>
         {
             try
             {
@@ -59,6 +61,9 @@ public class BranchHierarchyAnalyzer(
                 })];
             }
         }, cancellationToken);
+        logger.LogInformation("[PERF] AnalyzeBranchHierarchy: {ElapsedMs}ms ({BranchCount} branches)",
+            sw.ElapsedMilliseconds, result.Count);
+        return result;
     }
 
     private List<BranchHierarchyInfo> AnalyzeBranchHierarchyWithRepository(
@@ -101,7 +106,10 @@ public class BranchHierarchyAnalyzer(
             }
 
             // Find parent branch and merge base
+            var branchSw = Stopwatch.StartNew();
             var (parentName, mergeBaseSha, commitCount) = FindBranchPoint(repo, libgit2Branch, item.Tier, result);
+            logger.LogDebug("[PERF] FindBranchPoint {BranchName}: {ElapsedMs}ms (parent={Parent}, commits={Commits})",
+                item.Branch.Name, branchSw.ElapsedMilliseconds, parentName ?? "none", commitCount);
 
             var hierarchyInfo = new BranchHierarchyInfo
             {
@@ -169,7 +177,10 @@ public class BranchHierarchyAnalyzer(
 
             try
             {
+                var mergeBaseSw = Stopwatch.StartNew();
                 var mergeBase = repo.ObjectDatabase.FindMergeBase(branch.Tip, parentBranch.Tip);
+                logger.LogDebug("[PERF] FindMergeBase {Branch} vs {Parent}: {ElapsedMs}ms",
+                    branch.FriendlyName, candidate.Name, mergeBaseSw.ElapsedMilliseconds);
                 if (mergeBase != null)
                 {
                     // Count commits since merge base using LibGit2Sharp's filtering

@@ -3,6 +3,7 @@ using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
 using Lanius.Business.Storage.Services;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Lanius.Business.Layout.Services;
 
@@ -17,6 +18,7 @@ public class LogicalLayoutEngine(
     ILoggerFactory loggerFactory) : ILayoutEngine
 {
     private readonly ILogger<LogicalLayoutEngine> _logger = loggerFactory.CreateLogger<LogicalLayoutEngine>();
+
     public async Task<LayoutResult> CalculateLayoutAsync(
         string repositoryId,
         LayoutOptions options,
@@ -26,10 +28,13 @@ public class LogicalLayoutEngine(
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryId);
         ArgumentNullException.ThrowIfNull(options);
 
+        var totalSw = Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         progress?.Report(new LayoutProgress(0, "Loading branches", 0, 0));
 
         // Load branches
         var branches = await LoadBranchesAsync(repositoryId, options.BranchFilter, cancellationToken);
+        _logger.LogInformation("[PERF] LoadBranches: {ElapsedMs}ms ({BranchCount} branches)", sw.ElapsedMilliseconds, branches.Count);
         if (branches.Count == 0)
         {
             return CreateEmptyResult(options.Mode);
@@ -38,8 +43,10 @@ public class LogicalLayoutEngine(
         progress?.Report(new LayoutProgress(10, $"Found {branches.Count} branches", branches.Count, branches.Count));
 
         // Load all commits for each branch
+        sw.Restart();
         var branchCommits = await LoadAllCommitsAsync(repositoryId, branches, progress, cancellationToken);
         var allCommits = branchCommits.Values.SelectMany(c => c).DistinctBy(c => c.Sha).ToList();
+        _logger.LogInformation("[PERF] LoadCommits: {ElapsedMs}ms ({CommitCount} unique commits)", sw.ElapsedMilliseconds, allCommits.Count);
 
         if (allCommits.Count == 0)
         {
@@ -52,17 +59,24 @@ public class LogicalLayoutEngine(
         var branchLanes = AssignBranchLanes(branches, options);
 
         // Calculate node positions
+        sw.Restart();
         var nodes = CalculateNodePositions(allCommits, branchCommits, branchLanes, options);
+        _logger.LogInformation("[PERF] CalculateNodes: {ElapsedMs}ms ({NodeCount} nodes)", sw.ElapsedMilliseconds, nodes.Count);
 
         progress?.Report(new LayoutProgress(80, $"Calculating edges for {nodes.Count} nodes", nodes.Count, nodes.Count));
 
         // Calculate edges (branch lines)
+        sw.Restart();
         var edges = CalculateEdges(nodes, branchCommits);
+        _logger.LogInformation("[PERF] CalculateEdges: {ElapsedMs}ms ({EdgeCount} edges)", sw.ElapsedMilliseconds, edges.Count);
 
         progress?.Report(new LayoutProgress(100, $"Layout complete: {allCommits.Count} commits, {branches.Count} branches", allCommits.Count, allCommits.Count));
 
         // Calculate final dimensions
         var (width, height) = CalculateDimensions(nodes, options);
+
+        _logger.LogInformation("[PERF] CalculateLayout total: {ElapsedMs}ms ({CommitCount} commits, {BranchCount} branches)",
+            totalSw.ElapsedMilliseconds, allCommits.Count, branches.Count);
 
         return new LayoutResult
         {
@@ -132,6 +146,7 @@ public class LogicalLayoutEngine(
             repositoryStorageService,
             loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
 
+        var hierarchySw = Stopwatch.StartNew();
         var hierarchyInfo = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
             repositoryId,
             branches,
@@ -147,7 +162,8 @@ public class LogicalLayoutEngine(
             }),
             cancellationToken);
 
-        _logger.LogInformation("Branch hierarchy analysis complete. Loading commits per branch...");
+        _logger.LogInformation("[PERF] BranchHierarchyAnalysis: {ElapsedMs}ms ({BranchCount} branches)",
+            hierarchySw.ElapsedMilliseconds, hierarchyInfo.Count);
 
         // Phase 2: Load commits per branch (20-60% of progress)
         // Early return for 0 branches (empty repository)
@@ -164,6 +180,9 @@ public class LogicalLayoutEngine(
             .Select(b => (b.Name, b.MergeBaseSha))
             .ToList();
 
+        // Build dictionary for O(1) progress callback lookups (avoids O(n) First() per event)
+        var hierarchyDict = hierarchyInfo.ToDictionary(b => b.Name);
+
         // PERFORMANCE FIX: single repository open for all branches
         var batchProgress = new Progress<(int processed, int total, string currentBranch)>(p =>
         {
@@ -175,15 +194,15 @@ public class LogicalLayoutEngine(
                 p.processed,
                 p.total));
 
-            if (!string.IsNullOrEmpty(p.currentBranch))
+            if (!string.IsNullOrEmpty(p.currentBranch) && hierarchyDict.TryGetValue(p.currentBranch, out var info))
             {
-                var info = hierarchyInfo.First(b => b.Name == p.currentBranch);
                 _logger.LogInformation(
                     "Loading commits for branch {BranchName} (Tier={Tier}, MergeBase={MergeBase}, EstCommits={EstCommits})",
                     info.Name, info.Tier, info.MergeBaseSha?[..8] ?? "none", info.CommitCount);
             }
         });
 
+        var batchSw = Stopwatch.StartNew();
         var batchResult = await commitAnalyzer.GetCommitsBatchAsync(
             repositoryId,
             batchRequest,
@@ -195,7 +214,8 @@ public class LogicalLayoutEngine(
             kvp => kvp.Value.ToList());
 
         var totalCommits = result.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
-        _logger.LogInformation("Commit loading complete. Total unique commits: {TotalCommits}", totalCommits);
+        _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches, {CommitCount} unique commits)",
+            batchSw.ElapsedMilliseconds, branches.Count, totalCommits);
 
         return result;
     }

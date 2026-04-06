@@ -2,6 +2,7 @@ using Lanius.Business.Analysis.Models;
 using Lanius.Business.Storage.Services;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using DomainCommit = Lanius.Business.Analysis.Models.Commit;
 using GitCommit = LibGit2Sharp.Commit;
 
@@ -200,15 +201,10 @@ public class CommitAnalyzer(
     {
         return await Task.Run(() =>
         {
-            var repoOpenStart = DateTimeOffset.UtcNow;
+            var sw = Stopwatch.StartNew();
             using var repo = OpenRepository(repositoryId);
-            var repoOpenElapsed = (DateTimeOffset.UtcNow - repoOpenStart).TotalMilliseconds;
-
-            logger.LogInformation("Opened repository for {BranchName} in {OpenTimeMs:F0}ms",
-                branchName, repoOpenElapsed);
-
+            logger.LogInformation("[PERF] OpenRepository ({BranchName}): {ElapsedMs}ms", branchName, sw.ElapsedMilliseconds);
             return GetCommitsSinceInternal(repo, branchName, sinceCommitSha);
-
         }, cancellationToken);
     }
 
@@ -220,12 +216,10 @@ public class CommitAnalyzer(
     {
         return Task.Run(() =>
         {
-            var repoOpenStart = DateTimeOffset.UtcNow;
+            var totalSw = Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
             using var repo = OpenRepository(repositoryId);
-            var repoOpenElapsed = (DateTimeOffset.UtcNow - repoOpenStart).TotalMilliseconds;
-
-            logger.LogInformation("Opened repository once for {BranchCount} branches in {OpenTimeMs:F0}ms",
-                branches.Count, repoOpenElapsed);
+            logger.LogInformation("[PERF] OpenRepository (batch {BranchCount} branches): {ElapsedMs}ms", branches.Count, sw.ElapsedMilliseconds);
 
             var result = new Dictionary<string, IReadOnlyList<DomainCommit>>(branches.Count);
 
@@ -238,6 +232,7 @@ public class CommitAnalyzer(
             }
 
             progress?.Report((branches.Count, branches.Count, string.Empty));
+            logger.LogInformation("[PERF] GetCommitsBatch total: {ElapsedMs}ms ({BranchCount} branches)", totalSw.ElapsedMilliseconds, branches.Count);
             return result;
         }, cancellationToken);
     }
@@ -251,38 +246,27 @@ public class CommitAnalyzer(
             ?? throw new InvalidOperationException($"Branch not found: {branchName}");
 
         IEnumerable<GitCommit> commits;
+        var sw = Stopwatch.StartNew();
 
         if (sinceCommitSha == null)
         {
             // No merge base - return all commits
-            var startTime = DateTimeOffset.UtcNow;
             var commitList = branch.Commits.ToList();
-            var elapsed = (DateTimeOffset.UtcNow - startTime).TotalSeconds;
-
-            logger.LogInformation(
-                "Enumerated {CommitCount} commits for branch {BranchName} in {ElapsedSeconds:F1}s",
-                commitList.Count,
-                branchName,
-                elapsed);
-
+            logger.LogInformation("[PERF] Enumerate {BranchName} (full): {ElapsedMs}ms ({CommitCount} commits)",
+                branchName, sw.ElapsedMilliseconds, commitList.Count);
             commits = commitList;
         }
         else
         {
-            // Manually filter commits: stop at merge base
+            // Lazy: stop at merge base — enumeration happens during mapping below
             commits = branch.Commits.TakeWhile(c => c.Sha != sinceCommitSha);
         }
 
-        // Map to domain commits
-        var startMapping = DateTimeOffset.UtcNow;
+        // Map to domain commits (for TakeWhile path, this also drives enumeration)
+        sw.Restart();
         var result = commits.Select(c => MapCommitFast(c, branchName)).ToList() as IReadOnlyList<DomainCommit>;
-        var mappingElapsed = (DateTimeOffset.UtcNow - startMapping).TotalSeconds;
-
-        logger.LogInformation(
-            "Mapped {CommitCount} commits for branch {BranchName} in {ElapsedSeconds:F1}s",
-            result.Count,
-            branchName,
-            mappingElapsed);
+        logger.LogInformation("[PERF] Map {BranchName}: {ElapsedMs}ms ({CommitCount} commits, mergeBase={MergeBase})",
+            branchName, sw.ElapsedMilliseconds, result.Count, sinceCommitSha?[..8] ?? "none");
 
         return result;
     }
