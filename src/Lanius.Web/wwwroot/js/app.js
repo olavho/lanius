@@ -287,6 +287,7 @@ function clearRepositoryState() {
     state.relationships = [];
     state.replaySessionId = null;
 
+    document.querySelector('.sidebar').classList.remove('has-repo');
     // Clear visualization
     clearVisualization();
 
@@ -313,6 +314,7 @@ function clearRepositoryState() {
 async function loadRepository() {
     if (!state.repositoryId) return;
 
+    document.querySelector('.sidebar').classList.add('has-repo');
     try {
         updateStatus('repo-status', 'Loading repository layout...');
         showLayoutProgress('Loading commits...');
