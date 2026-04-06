@@ -42,10 +42,24 @@ public record LayoutEdge
     public required EdgeType Type { get; init; }
 
     /// <summary>
-    /// Path points for rendering (allows curves/beziers).
-    /// Format: [[x1, y1], [x2, y2], ...]
+    /// Start X coordinate.
     /// </summary>
-    public required List<double[]> Points { get; init; }
+    public required double X1 { get; init; }
+
+    /// <summary>
+    /// Start Y coordinate.
+    /// </summary>
+    public required double Y1 { get; init; }
+
+    /// <summary>
+    /// End X coordinate.
+    /// </summary>
+    public required double X2 { get; init; }
+
+    /// <summary>
+    /// End Y coordinate.
+    /// </summary>
+    public required double Y2 { get; init; }
 
     /// <summary>
     /// Branch this edge belongs to.

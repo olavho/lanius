@@ -130,7 +130,22 @@ public class LayoutEdgeDto
     public required string BranchName { get; init; }
 
     /// <summary>
-    /// Polyline points for rendering curved/segmented edges.
+    /// Start X coordinate.
     /// </summary>
-    public List<(double X, double Y)>? Points { get; init; }
+    public required double X1 { get; init; }
+
+    /// <summary>
+    /// Start Y coordinate.
+    /// </summary>
+    public required double Y1 { get; init; }
+
+    /// <summary>
+    /// End X coordinate.
+    /// </summary>
+    public required double X2 { get; init; }
+
+    /// <summary>
+    /// End Y coordinate.
+    /// </summary>
+    public required double Y2 { get; init; }
 }

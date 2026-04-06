@@ -102,7 +102,10 @@ public class LayoutController(
                     ToCommitId = e.ToCommitId,
                     Type = e.Type,
                     BranchName = e.BranchName ?? string.Empty,
-                    Points = e?.Points?.Select(p => (p[0], p[1])).ToList()
+                    X1 = e.X1,
+                    Y1 = e.Y1,
+                    X2 = e.X2,
+                    Y2 = e.Y2
                 })],
                 Width = result.Width,
                 Height = result.Height,

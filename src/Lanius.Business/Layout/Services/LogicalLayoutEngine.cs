@@ -457,11 +457,10 @@ public class LogicalLayoutEngine(
                             FromCommitId = parentSha,
                             ToCommitId = commit.Sha,
                             Type = edgeType,
-                            Points =
-                            [
-                                [parentNode.X, parentNode.Y],
-                                [childNode.X, childNode.Y]
-                            ],
+                            X1 = parentNode.X,
+                            Y1 = parentNode.Y,
+                            X2 = childNode.X,
+                            Y2 = childNode.Y,
                             BranchName = childBranch // Edge belongs to the child branch
                         });
                     }
@@ -493,11 +492,10 @@ public class LogicalLayoutEngine(
                             FromCommitId = fromCommit.Sha,
                             ToCommitId = toCommit.Sha,
                             Type = EdgeType.Normal,
-                            Points =
-                            [
-                                [fromNode.X, fromNode.Y],
-                                [toNode.X, toNode.Y]
-                            ],
+                            X1 = fromNode.X,
+                            Y1 = fromNode.Y,
+                            X2 = toNode.X,
+                            Y2 = toNode.Y,
                             BranchName = branchName
                         });
                     }
