@@ -17,10 +17,11 @@ namespace Lanius.Business.Layout.Services;
 public class LogicalLayoutEngine(
     ICommitAnalyzer commitAnalyzer,
     IBranchAnalyzer branchAnalyzer,
+    IBranchHierarchyAnalyzer branchHierarchyAnalyzer,
     IRepositoryStorageService repositoryStorageService,
-    ILoggerFactory loggerFactory) : ILayoutEngine
+    ILogger<LogicalLayoutEngine> logger) : ILayoutEngine
 {
-    private readonly ILogger<LogicalLayoutEngine> _logger = loggerFactory.CreateLogger<LogicalLayoutEngine>();
+    private readonly ILogger<LogicalLayoutEngine> _logger = logger;
 
     public async Task<LayoutResult> CalculateLayoutAsync(
         string repositoryId,
@@ -143,10 +144,6 @@ public class LogicalLayoutEngine(
         _logger.LogInformation("Loading commits for {BranchCount} branches using branch hierarchy optimization", branches.Count);
         progress?.Report(new LayoutProgress(10, "Analyzing branch hierarchy...", 0, branches.Count));
 
-        var hierarchyAnalyzer = new BranchHierarchyAnalyzer(
-            repositoryStorageService,
-            loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
-
         var hierarchyProgress = new Progress<LayoutProgress>(p =>
         {
             var scaledPercentage = 10 + (int)(p.Percentage * 0.1);
@@ -155,7 +152,9 @@ public class LogicalLayoutEngine(
 
         // B1: open the repository once and share it between hierarchy analysis and commit batch loading.
         // Falls back to separate opens when RepositoryExists returns false (e.g. in unit tests with mocked services).
-        if (repositoryStorageService.RepositoryExists(repositoryId) && commitAnalyzer is CommitAnalyzer concreteAnalyzer)
+        if (repositoryStorageService.RepositoryExists(repositoryId)
+            && commitAnalyzer is CommitAnalyzer concreteAnalyzer
+            && branchHierarchyAnalyzer is BranchHierarchyAnalyzer concreteHierarchyAnalyzer)
         {
             try
             {
@@ -164,7 +163,7 @@ public class LogicalLayoutEngine(
                     var sw = Stopwatch.StartNew();
                     using var repo = new Repository(repositoryStorageService.GetRepositoryPath(repositoryId));
 
-                    var hierarchyInfo = hierarchyAnalyzer.AnalyzeBranchHierarchyWithRepository(repo, branches, hierarchyProgress);
+                    var hierarchyInfo = concreteHierarchyAnalyzer.AnalyzeBranchHierarchyWithRepository(repo, branches, hierarchyProgress);
                     _logger.LogInformation("[PERF] BranchHierarchyAnalysis: {ElapsedMs}ms ({BranchCount} branches)",
                         sw.ElapsedMilliseconds, hierarchyInfo.Count);
 
@@ -198,7 +197,7 @@ public class LogicalLayoutEngine(
         // Fallback: separate async calls — used in tests with mocked ICommitAnalyzer / IRepositoryStorageService
         {
             var hierarchySw = Stopwatch.StartNew();
-            var hierarchyInfo = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
+            var hierarchyInfo = await branchHierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
                 repositoryId, branches, hierarchyProgress, cancellationToken);
             _logger.LogInformation("[PERF] BranchHierarchyAnalysis: {ElapsedMs}ms ({BranchCount} branches)",
                 hierarchySw.ElapsedMilliseconds, hierarchyInfo.Count);

@@ -277,24 +277,21 @@ public class CommitAnalyzer(
 
         var sw = Stopwatch.StartNew();
 
-        // B2: use native CommitFilter to bound the walk at the merge base
+        // B4: native topological sort — avoids LINQ OrderBy over entire branch history.
+        // Use TakeWhile to stop at the merge base (O(branch_unique_commits)) rather than
+        // ExcludeReachableFrom (O(merge_base_ancestors) per branch — too expensive for large repos).
         var filter = new CommitFilter
         {
             IncludeReachableFrom = branch.Tip,
             SortBy = CommitSortStrategies.Topological
         };
-        if (sinceCommitSha != null)
-        {
-            var mergeBase = repo.Lookup<GitCommit>(sinceCommitSha);
-            if (mergeBase != null)
-                filter.ExcludeReachableFrom = mergeBase;
-            else
-                logger.LogWarning("Merge base {Sha} not found, loading full branch history for {BranchName}",
-                    sinceCommitSha[..8], branchName);
-        }
 
-        var commits = repo.Commits.QueryBy(filter).ToList();
-        logger.LogInformation("[PERF] Enumerate {BranchName}: {ElapsedMs}ms ({CommitCount} commits, mergeBase={MergeBase})",
+        IEnumerable<GitCommit> walk = repo.Commits.QueryBy(filter);
+        if (sinceCommitSha != null)
+            walk = walk.TakeWhile(c => c.Sha != sinceCommitSha);
+
+        var commits = walk.ToList();
+        logger.LogInformation("[PERF] Enumerate {BranchName}: {ElapsedMs}ms ({CommitCount} commits, since={MergeBase})",
             branchName, sw.ElapsedMilliseconds, commits.Count, sinceCommitSha?[..8] ?? "none");
 
         sw.Restart();

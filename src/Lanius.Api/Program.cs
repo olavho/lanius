@@ -34,6 +34,7 @@ builder.Services.Configure<MonitoringOptions>(
 builder.Services.AddSingleton<IRepositoryStorageService, RepositoryStorageService>();
 builder.Services.AddScoped<ICommitAnalyzer, CommitAnalyzer>();
 builder.Services.AddScoped<IBranchAnalyzer, BranchAnalyzer>();
+builder.Services.AddScoped<IBranchHierarchyAnalyzer, BranchHierarchyAnalyzer>();
 
 // Register both layout engines
 builder.Services.AddScoped<LogicalLayoutEngine>();

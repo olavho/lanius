@@ -113,32 +113,39 @@ with machine name, .NET version, repo, and per-operation timings.
 
 ---
 
-### Iteration 3: Fix B2 — Use `CommitFilter` for branch-specific walks (High Impact)
+### Iteration 3: Fix B2 — Use `CommitFilter` for branch-specific walks
 
-**Goal**: Replace manual `TakeWhile` / `foreach+break` with native graph-bounded walks.
+**Status: Partially implemented — `FindBranchPoint` only. `GetCommitsSinceInternal` reverted.**
 
-**Changes:**
-- `CommitAnalyzer.GetCommitsSinceInternal`: replace `branch.Commits.TakeWhile(c => c.Sha != sinceCommitSha)`
-  with `repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = branch.Tip, ExcludeReachableFrom = mergeBaseCommit })`.
-- `BranchHierarchyAnalyzer.FindBranchPoint`: replace manual commit count loop with the same `CommitFilter`
-  approach + `.Count()` (the native walker terminates at the exclusion boundary, not in managed code).
+**Measurements (ZEN-02, semantic-kernel):**
+- `BranchHierarchyAsync`: 1673ms → 460ms (−72%) ✅ — `CommitFilter.Count()` in `FindBranchPoint` wins.
+- `LogicalLayout` total: 8800ms → 10675ms (+21%) 🔴 — `ExcludeReachableFrom` regressed commit loading.
 
-**Expected impact**: For branches with deep history (e.g. `origin/main` with 10K commits), this can be an
-order-of-magnitude improvement.
+**Root cause of regression:** `ExcludeReachableFrom = mergeBase` is O(merge_base_ancestors) — libgit2
+marks **all** commits reachable from the merge base before walking. For semantic-kernel, main has thousands
+of ancestors; multiplied across 200+ branches this dominates. `TakeWhile` was O(branch_unique_commits).
+
+**Resolution:** `GetCommitsSinceInternal` reverted to `TakeWhile` but keeps `CommitFilter { SortBy = Topological }` (preserves B4 native sort). `FindBranchPoint` keeps `CommitFilter.Count()` — it wins
+because the hierarchy analysis no longer does per-branch `foreach+break` over the full branch chain.
+
+**Changes kept:**
+- `BranchHierarchyAnalyzer.FindBranchPoint`: `CommitFilter.Count()` — **kept** ✅
+- `CommitAnalyzer.GetCommitsSinceInternal`: `TakeWhile` — **reverted** (ExcludeReachableFrom removed)
 
 ---
 
-### Iteration 4: Fix B1 — Repository connection scope (Medium/High Impact)
+### Iteration 4: Fix B1 — Repository connection scope
 
-**Goal**: Open `Repository` once per layout calculation, share across analyzers.
+**Status: Implemented.**
 
-**Approach options** (decide after measuring B1's actual cost in Iteration 0/1):
-- **Option A** (lightweight): Pass an already-open `Repository` instance as a parameter through the call
-  chain for operations that are already coordinated (e.g. `GetCommitsBatchAsync` already does this).
-- **Option B** (DI-scoped): Introduce `IRepositorySession` (wraps `Repository`, scoped lifetime) injected
-  into the analyzers, managed by the layout engine for the duration of one calculation.
+**Changes:**
+- `LogicalLayoutEngine.LoadAllCommitsAsync`: opens `Repository` once in a single `Task.Run`; shares it
+  between `BranchHierarchyAnalyzer.AnalyzeBranchHierarchyWithRepository` and
+  `CommitAnalyzer.GetCommitsBatchFromRepo`. Falls back to separate async interface calls when
+  `RepositoryExists` returns false (e.g. unit tests with mocked services).
 
-Option A is simpler and avoids DI restructuring. Option B enables future caching on the session.
+**Measurements (ZEN-02, reactive):** LogicalLayout 2616ms → 1273ms (−51%) ✅
+(Hierarchy savings from B1+B2/hierarchy flow through to the total.)
 
 ---
 

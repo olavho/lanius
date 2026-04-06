@@ -12,7 +12,7 @@ namespace Lanius.Business.Layout.Services;
 /// </summary>
 public class BranchHierarchyAnalyzer(
     IRepositoryStorageService repositoryStorageService,
-    ILogger<BranchHierarchyAnalyzer> logger)
+    ILogger<BranchHierarchyAnalyzer> logger) : IBranchHierarchyAnalyzer
 {
     /// <summary>
     /// Analyze branch hierarchy for efficient commit loading.

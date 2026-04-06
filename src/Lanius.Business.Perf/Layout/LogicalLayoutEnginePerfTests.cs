@@ -32,7 +32,8 @@ public class LogicalLayoutEnginePerfTests : PerfTestBase
         var storage = CreateStorageService(RepoPath!);
         var commitAnalyzer = new CommitAnalyzer(storage, loggerFactory.CreateLogger<CommitAnalyzer>());
         var branchAnalyzer = new BranchAnalyzer(storage);
-        var engine = new LogicalLayoutEngine(commitAnalyzer, branchAnalyzer, storage, loggerFactory);
+        var hierarchyAnalyzer = new BranchHierarchyAnalyzer(storage, loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
+        var engine = new LogicalLayoutEngine(commitAnalyzer, branchAnalyzer, hierarchyAnalyzer, storage, loggerFactory.CreateLogger<LogicalLayoutEngine>());
 
         var options = new LayoutOptions { Mode = LayoutMode.Logical, BranchFilter = BranchFilter };
         Console.WriteLine($"Starting logical layout from: {RepoPath}");
@@ -70,7 +71,8 @@ public class LogicalLayoutEnginePerfTests : PerfTestBase
         var storage = CreateStorageService(RepoPath!);
         var commitAnalyzer = new CommitAnalyzer(storage, loggerFactory.CreateLogger<CommitAnalyzer>());
         var branchAnalyzer = new BranchAnalyzer(storage);
-        var engine = new LogicalLayoutEngine(commitAnalyzer, branchAnalyzer, storage, loggerFactory);
+        var hierarchyAnalyzer = new BranchHierarchyAnalyzer(storage, loggerFactory.CreateLogger<BranchHierarchyAnalyzer>());
+        var engine = new LogicalLayoutEngine(commitAnalyzer, branchAnalyzer, hierarchyAnalyzer, storage, loggerFactory.CreateLogger<LogicalLayoutEngine>());
 
         // Filter to main + project/* to measure the typical dashboard scenario
         var options = new LayoutOptions { Mode = LayoutMode.Logical, BranchFilter = "main, master, project/*" };
