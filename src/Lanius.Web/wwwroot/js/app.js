@@ -23,10 +23,34 @@ let state = {
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
+    restorePanelStates();
+    initPanelToggles();
     initializeEventHandlers();
     initializeSignalR();
     loadExistingRepositories();
 });
+
+function restorePanelStates() {
+    document.querySelectorAll('.control-panel[id]').forEach(panel => {
+        try {
+            if (localStorage.getItem(`panel-collapsed:${panel.id}`) === '1') {
+                panel.classList.add('control-panel--collapsed');
+            }
+        } catch (e) { /* localStorage unavailable */ }
+    });
+}
+
+function initPanelToggles() {
+    document.querySelectorAll('.panel-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const panel = btn.closest('.control-panel');
+            const isCollapsed = panel.classList.toggle('control-panel--collapsed');
+            try {
+                localStorage.setItem(`panel-collapsed:${panel.id}`, isCollapsed ? '1' : '0');
+            } catch (e) { /* localStorage unavailable */ }
+        });
+    });
+}
 
 // Event Handlers
 function initializeEventHandlers() {
@@ -84,13 +108,10 @@ function initializeEventHandlers() {
         const granularityGroup = document.getElementById('granularity-group');
         const infoText = document.getElementById('layout-mode-info');
 
-        if (state.layoutMode === 'calendar') {
-            granularityGroup.style.display = 'block';
-            infoText.innerHTML = '<small>Groups commits by time periods</small>';
-        } else {
-            granularityGroup.style.display = 'none';
-            infoText.innerHTML = '<small>Shows commits on branch timelines</small>';
-        }
+        granularityGroup.classList.toggle('is-visible', state.layoutMode === 'calendar');
+        infoText.innerHTML = state.layoutMode === 'calendar'
+            ? '<small>Groups commits by time periods</small>'
+            : '<small>Shows commits on branch timelines</small>';
 
         // Reload layout with new mode if repository is loaded
         if (state.repositoryId) {
