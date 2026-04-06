@@ -24,18 +24,40 @@ public class ReplayService(IServiceProvider serviceProvider) : IReplayService
         using var scope = serviceProvider.CreateScope();
         var commitAnalyzer = scope.ServiceProvider.GetRequiredService<ICommitAnalyzer>();
 
-        // Get commits chronologically
-        var commits = await commitAnalyzer.GetCommitsChronologicallyAsync(
-            repositoryId,
-            options.StartDate,
-            options.EndDate,
-            cancellationToken);
+        IReadOnlyList<Commit> commits;
 
-        // Filter by branch if specified
         if (!string.IsNullOrWhiteSpace(options.BranchFilter))
         {
-            commits = [.. commits.Where(c => c.Branches.Contains(options.BranchFilter, StringComparer.OrdinalIgnoreCase))];
+            // Fetch commits for the specific branch — LibGit2Sharp resolves "origin/main" natively
+            commits = await commitAnalyzer.GetCommitsSinceAsync(
+                repositoryId,
+                options.BranchFilter,
+                sinceCommitSha: null,
+                cancellationToken);
+
+            // Apply date range if specified
+            if (options.StartDate.HasValue || options.EndDate.HasValue)
+            {
+                commits = [.. commits.Where(c =>
+                    (!options.StartDate.HasValue || c.Timestamp >= options.StartDate.Value) &&
+                    (!options.EndDate.HasValue || c.Timestamp <= options.EndDate.Value))];
+            }
         }
+        else
+        {
+            commits = await commitAnalyzer.GetCommitsChronologicallyAsync(
+                repositoryId,
+                options.StartDate,
+                options.EndDate,
+                cancellationToken);
+        }
+
+        // Replay must stream oldest → newest so commits appear left-to-right on the timeline
+        commits = [.. commits.OrderBy(c => c.Timestamp)];
+
+        // Skip commits before StartIndex (used for scrub/seek)
+        if (options.StartIndex > 0 && options.StartIndex < commits.Count)
+            commits = [.. commits.Skip(options.StartIndex)];
 
         var sessionId = Guid.NewGuid().ToString("N");
         var session = new ReplaySession

@@ -24,4 +24,9 @@ public record ReplayOptions
     /// Branch filter for replay.
     /// </summary>
     public string? BranchFilter { get; init; }
+
+    /// <summary>
+    /// Zero-based index of the first commit to stream (used for scrub/seek).
+    /// </summary>
+    public int StartIndex { get; init; } = 0;
 }

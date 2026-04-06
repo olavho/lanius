@@ -683,6 +683,7 @@ const Visualization = (() => {
             .enter()
             .append('g')
             .attr('class', d => `commit-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branchName)}`)
+            .attr('data-commit-id', d => d.commitId)
             .attr('transform', d => `translate(${d.x}, ${d.y})`)
             .on('click', (event, d) => showNodeDetail(d))
             .on('mouseenter', handleNodeHover)
@@ -1024,6 +1025,77 @@ const Visualization = (() => {
         setTimeout(() => tooltip.classed('is-visible', true), 0);
     }
 
+    // Replay mode functions
+    function startReplayMode() {
+        // Hide all commit nodes; they will be revealed one-by-one via revealCommit()
+        g.selectAll('.commit-node').classed('replay-hidden', true);
+    }
+
+    function stopReplayMode() {
+        g.selectAll('.commit-node').classed('replay-hidden', false);
+    }
+
+    function revealCommit(sha) {
+        g.selectAll('.commit-node')
+            .filter(function () { return d3.select(this).attr('data-commit-id') === sha; })
+            .classed('replay-hidden', false);
+
+        scrollToCommit(sha);
+    }
+
+    function revealRange(shas) {
+        const shaSet = new Set(shas);
+        g.selectAll('.commit-node')
+            .filter(function () { return shaSet.has(d3.select(this).attr('data-commit-id')); })
+            .classed('replay-hidden', false);
+    }
+
+    function scrollToCommit(sha) {
+        if (!currentLayout || !svg || !zoomBehavior) return;
+
+        const node = currentLayout.nodes.find(n => n.commitId === sha);
+        if (!node) return;
+
+        const svgEl = document.getElementById('commit-graph');
+        const container = svgEl.parentElement;
+        container.scrollLeft = 0;
+
+        const viewW = container.clientWidth  || 1200;
+        const viewH = container.clientHeight || 600;
+        const k     = currentZoom.k;
+
+        const newTx = viewW / 2 - k * node.x;
+        const newTy = viewH / 2 - k * node.y;
+        const newTransform = d3.zoomIdentity.translate(newTx, newTy).scale(k);
+
+        svg.transition()
+            .duration(400)
+            .ease(d3.easeCubicOut)
+            .call(zoomBehavior.transform, newTransform);
+    }
+
+    function jumpToCommit(sha) {
+        if (!currentLayout || !svg || !zoomBehavior) return;
+
+        const node = currentLayout.nodes.find(n => n.commitId === sha);
+        if (!node) return;
+
+        const svgEl = document.getElementById('commit-graph');
+        const container = svgEl.parentElement;
+        container.scrollLeft = 0;
+
+        const viewW = container.clientWidth  || 1200;
+        const viewH = container.clientHeight || 600;
+        const k     = currentZoom.k;
+
+        const newTx = viewW / 2 - k * node.x;
+        const newTy = viewH / 2 - k * node.y;
+        const newTransform = d3.zoomIdentity.translate(newTx, newTy).scale(k);
+
+        // Apply immediately (no transition) — used after seek to override any in-flight scrolls
+        svg.call(zoomBehavior.transform, newTransform);
+    }
+
     // Zoom control functions
     function resetZoom() {
         if (svg && zoomBehavior) {
@@ -1058,7 +1130,13 @@ const Visualization = (() => {
         clear: clearAll,
         resetZoom,
         zoomIn,
-        zoomOut
+        zoomOut,
+        startReplayMode,
+        stopReplayMode,
+        revealCommit,
+        revealRange,
+        scrollToCommit,
+        jumpToCommit
     };
 })();
 

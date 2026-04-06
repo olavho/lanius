@@ -11,6 +11,9 @@ let state = {
     relationships: [], // Add relationships array
     replaySessionId: null,
     replaySpeed: 1.0,
+    replayIndex: 0,
+    replayTotalCommits: 0,
+    replayCommitOrder: [],  // ordered sha list matching backend stream order
     layoutMode: 'logical', // Current layout mode
     calendarGranularity: 'month', // Calendar granularity
     stats: {
@@ -71,6 +74,18 @@ function initializeEventHandlers() {
         const speed = parseFloat(e.target.value);
         state.replaySpeed = speed;
         document.getElementById('speed-display').textContent = `${speed.toFixed(1)}x`;
+    });
+
+    // Replay scrub slider — preview on drag, seek on release
+    const scrubSlider = document.getElementById('replay-scrub');
+    scrubSlider.addEventListener('input', (e) => {
+        const targetIndex = parseInt(e.target.value);
+        const remaining = state.replayTotalCommits - targetIndex;
+        document.getElementById('np-progress').textContent = `${targetIndex} / ${state.replayTotalCommits}`;
+        document.getElementById('np-time-remaining').textContent = formatDuration(remaining / state.replaySpeed);
+    });
+    scrubSlider.addEventListener('change', (e) => {
+        seekReplay(parseInt(e.target.value));
     });
 
     // Monitoring
@@ -143,7 +158,7 @@ async function initializeSignalR() {
     // Event handlers
     state.connection.on('ReceiveNewCommits', handleNewCommits);
     state.connection.on('RepositoryUpdated', handleRepositoryUpdated);
-    state.connection.on('ReplayCommit', handleReplayCommit);
+    state.connection.on('CommitRevealed', handleCommitRevealed);
     state.connection.on('ReplayCompleted', handleReplayCompleted);
     state.connection.on('ReplayError', handleReplayError);
     state.connection.on('LayoutProgress', handleLayoutProgress);
@@ -401,6 +416,7 @@ async function loadRepository() {
         // Render visualization with new layout data
         console.log('Calling renderVisualization with layout data');
         renderVisualization();
+        populateReplayBranchList();
 
         hideLayoutProgress();
         updateCanvasInfo(`${layout.totalCommits} commits (${layout.totalBranches} branches)`);
@@ -448,8 +464,29 @@ async function startReplay() {
         return;
     }
 
+    const replayBranch = document.getElementById('replay-branch').value.trim() || 'main';
+
     try {
-        updateStatus('replay-status', 'Starting replay...');
+        updateStatus('replay-status', 'Loading branch...');
+
+        // Load the layout filtered to the selected branch so only those commits are shown
+        await loadReplayLayout(replayBranch);
+
+        // Build ordered commit list — matches backend sort (oldest → newest)
+        state.replayCommitOrder = (state.layoutData?.nodes ?? [])
+            .filter(n => !n.isGhost)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            .map(n => n.commitId);
+        state.replayIndex = 0;
+        state.replayTotalCommits = state.replayCommitOrder.length;
+
+        const scrub = document.getElementById('replay-scrub');
+        scrub.max = state.replayTotalCommits;
+        scrub.value = 0;
+
+        // Hide all commit nodes — revealed one-by-one via CommitRevealed events
+        Visualization.startReplayMode();
+        document.getElementById('stat-commits').textContent = '0';
 
         const response = await fetch(
             `${API_URL}/api/repositories/${state.repositoryId}/replay/start`,
@@ -458,7 +495,7 @@ async function startReplay() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     speed: state.replaySpeed,
-                    branchFilter: document.getElementById('branch-pattern').value.split(',')[0]?.trim()
+                    branchFilter: replayBranch
                 })
             }
         );
@@ -466,11 +503,8 @@ async function startReplay() {
         const session = await response.json();
         state.replaySessionId = session.sessionId;
 
-        // Subscribe to replay stream
+        // Subscribe to replay stream — triggers backend streaming
         await state.connection.invoke('SubscribeToReplay', session.sessionId);
-
-        // Clear visualization for replay
-        clearVisualization();
 
         updateStatus('replay-status', `Playing ${session.totalCommits} commits at ${state.replaySpeed}x`);
         setReplayButtonState(true);
@@ -478,6 +512,45 @@ async function startReplay() {
     } catch (err) {
         console.error('Replay start error:', err);
         updateStatus('replay-status', 'Failed to start replay', true);
+    }
+}
+
+async function loadReplayLayout(branchFilter) {
+    let layoutUrl = `${API_URL}/api/repository/${state.repositoryId}/layout?mode=${state.layoutMode}`;
+    layoutUrl += `&branchFilter=${encodeURIComponent(branchFilter)}`;
+    if (state.layoutMode === 'calendar') {
+        layoutUrl += `&granularity=${state.calendarGranularity}`;
+    }
+
+    const layoutResponse = await fetch(layoutUrl);
+    if (!layoutResponse.ok) {
+        throw new Error(`Failed to load replay layout: ${layoutResponse.statusText}`);
+    }
+
+    const layout = await layoutResponse.json();
+    state.layoutData = layout;
+    renderVisualization();
+}
+
+function populateReplayBranchList() {
+    const datalist = document.getElementById('replay-branch-list');
+    const input = document.getElementById('replay-branch');
+
+    datalist.innerHTML = '';
+    const names = state.branches.map(b => b.name);
+
+    names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        datalist.appendChild(opt);
+    });
+
+    // Set default to the main/master branch if the current value isn't in the list
+    if (names.length > 0 && !names.includes(input.value)) {
+        const mainBranch = names.find(n =>
+            n === 'main' || n === 'origin/main' || n === 'master' || n === 'origin/master'
+        );
+        input.value = mainBranch ?? names[0];
     }
 }
 
@@ -528,7 +601,9 @@ async function stopReplay() {
         updateStatus('replay-status', 'Stopped');
         setReplayButtonState(false);
 
-        // Reload full visualization
+        // Clear replay state and reload full visualization
+        Visualization.stopReplayMode();
+        document.getElementById('replay-now-playing').classList.add('hidden');
         await loadRepository();
 
     } catch (err) {
@@ -592,21 +667,120 @@ function handleRepositoryUpdated(repo) {
     updateStats(repo);
 }
 
-function handleReplayCommit(commit) {
-    console.log('Replay commit:', commit);
-    animateReplayCommit(commit);
+function handleCommitRevealed(data) {
+    if (data.sessionId !== state.replaySessionId) return;
+    Visualization.revealCommit(data.sha);
+    state.replayIndex++;
+    const el = document.getElementById('stat-commits');
+    el.textContent = String(parseInt(el.textContent) + 1);
+
+    // Update "Now Playing" panel
+    const node = state.layoutData?.nodes?.find(n => n.commitId === data.sha);
+    if (node) {
+        document.getElementById('np-message').textContent = node.message || '(no message)';
+        document.getElementById('np-author').textContent  = node.author  || 'Unknown';
+        document.getElementById('np-date').textContent    = new Date(node.timestamp).toLocaleString();
+        document.getElementById('np-branch').textContent  = node.branchName || '';
+        document.getElementById('np-sha').textContent     = data.sha.substring(0, 8);
+        document.getElementById('replay-now-playing').classList.remove('hidden');
+    }
+
+    updateReplayProgress();
 }
 
 function handleReplayCompleted(data) {
+    if (data.sessionId !== state.replaySessionId) return;
     console.log('Replay completed:', data);
     updateStatus('replay-status', 'Replay completed');
     setReplayButtonState(false);
+    document.getElementById('replay-now-playing').classList.add('hidden');
 }
 
 function handleReplayError(error) {
+    if (error.sessionId && error.sessionId !== state.replaySessionId) return;
     console.error('Replay error:', error);
     updateStatus('replay-status', `Error: ${error.message}`, true);
     setReplayButtonState(false);
+}
+
+function updateReplayProgress() {
+    const { replayIndex, replayTotalCommits, replaySpeed } = state;
+    const remaining = replayTotalCommits - replayIndex;
+    document.getElementById('replay-scrub').value = replayIndex;
+    document.getElementById('np-progress').textContent = `${replayIndex} / ${replayTotalCommits}`;
+    document.getElementById('np-time-remaining').textContent = formatDuration(remaining / replaySpeed);
+}
+
+function formatDuration(seconds) {
+    if (!isFinite(seconds) || seconds <= 0) return '';
+    const m = Math.floor(seconds / 60);
+    const s = Math.ceil(seconds % 60);
+    return m > 0 ? `${m}:${String(s).padStart(2, '0')} remaining` : `${s}s remaining`;
+}
+
+async function seekReplay(targetIndex) {
+    if (!state.repositoryId) return;
+
+    const clampedIndex = Math.max(0, Math.min(targetIndex, state.replayTotalCommits));
+
+    // Null out session ID IMMEDIATELY — before any await — so every in-flight
+    // CommitRevealed / ReplayCompleted event from the old session is rejected
+    // by the session-ID guard in handleCommitRevealed / handleReplayCompleted.
+    const oldSessionId = state.replaySessionId;
+    state.replaySessionId = null;
+
+    // Stop current session if active
+    if (oldSessionId) {
+        try {
+            await fetch(
+                `${API_URL}/api/repositories/${state.repositoryId}/replay/${oldSessionId}/stop`,
+                { method: 'POST' }
+            );
+            await state.connection.invoke('UnsubscribeFromReplay', oldSessionId);
+        } catch (err) {
+            console.warn('seekReplay: stop failed', err);
+        }
+    }
+
+    // Re-hide all nodes, then reveal 0..clampedIndex-1 instantly (no scroll yet)
+    Visualization.startReplayMode();
+    if (clampedIndex > 0) {
+        Visualization.revealRange(state.replayCommitOrder.slice(0, clampedIndex));
+    }
+
+    state.replayIndex = clampedIndex;
+    document.getElementById('stat-commits').textContent = String(clampedIndex);
+    updateReplayProgress();
+
+    // Restart backend stream from the new position
+    const replayBranch = document.getElementById('replay-branch').value.trim() || 'main';
+    try {
+        const response = await fetch(
+            `${API_URL}/api/repositories/${state.repositoryId}/replay/start`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    speed: state.replaySpeed,
+                    branchFilter: replayBranch,
+                    startIndex: clampedIndex
+                })
+            }
+        );
+        const session = await response.json();
+        state.replaySessionId = session.sessionId;
+        await state.connection.invoke('SubscribeToReplay', session.sessionId);
+        setReplayButtonState(true);
+        updateStatus('replay-status', `Playing from ${clampedIndex} / ${state.replayTotalCommits}`);
+    } catch (err) {
+        console.error('seekReplay: restart failed', err);
+        updateStatus('replay-status', 'Seek failed', true);
+    }
+
+    // Jump synchronously LAST — overrides any in-flight CommitRevealed scroll events
+    if (clampedIndex > 0) {
+        Visualization.jumpToCommit(state.replayCommitOrder[clampedIndex - 1]);
+    }
 }
 
 function handleLayoutProgress(progress) {

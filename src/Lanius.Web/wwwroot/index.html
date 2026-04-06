@@ -62,14 +62,10 @@
                                 <div class="stat-label">Total Branches</div>
                                 <div class="stat-value" id="stat-branches">0</div>
                             </div>
-                            <div class="stat-item">
-                                <div class="stat-label">Lines Added</div>
-                                <div class="stat-value stat-positive" id="stat-additions">+0</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-label">Lines Removed</div>
-                                <div class="stat-value stat-negative" id="stat-deletions">-0</div>
-                            </div>
+                        </div>
+                        <div style="display:none">
+                            <div id="stat-additions">+0</div>
+                            <div id="stat-deletions">-0</div>
                         </div>
                     </div>
                 </section>
@@ -128,6 +124,12 @@
                         </button>
                     </div>
                     <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">Branch</label>
+                            <input type="text" id="replay-branch" class="input-field"
+                                   placeholder="main" value="main" list="replay-branch-list">
+                            <datalist id="replay-branch-list"></datalist>
+                        </div>
                         <div class="control-group">
                             <label class="control-label">
                                 Speed: <span id="speed-display">1.0x</span>
@@ -208,6 +210,36 @@
                     <div style="display: flex; align-items: center;">
                         <svg width="30" height="2" style="margin-right: 8px;"><line x1="0" y1="1" x2="30" y2="1" stroke="#FF9800" stroke-width="2" stroke-dasharray="3,3" /></svg>
                         <span>Merge</span>
+                    </div>
+                </div>
+
+                <!-- Replay Now Playing panel -->
+                <div id="replay-now-playing" class="replay-now-playing hidden">
+                    <div class="replay-now-playing-header">Now Playing</div>
+                    <div class="replay-np-message" id="np-message"></div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Author:</span>
+                        <span class="replay-np-value" id="np-author"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Date:</span>
+                        <span class="replay-np-value" id="np-date"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Branch:</span>
+                        <span class="replay-np-value" id="np-branch"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">SHA:</span>
+                        <span class="replay-np-value" id="np-sha"></span>
+                    </div>
+                    <div class="replay-np-footer">
+                        <div class="replay-np-progress-row">
+                            <span id="np-progress" class="replay-np-progress">0 / 0</span>
+                            <span id="np-time-remaining" class="replay-np-time"></span>
+                        </div>
+                        <input type="range" id="replay-scrub" class="replay-scrub-slider"
+                               min="0" max="100" value="0" step="1">
                     </div>
                 </div>
 
