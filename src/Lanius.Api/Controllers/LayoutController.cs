@@ -96,7 +96,8 @@ public class LayoutController(
                     Author = n.Author,
                     IsSignificant = n.IsSignificant,
                     GridRow = n.GridRow,
-                    GridColumn = n.GridColumn
+                    GridColumn = n.GridColumn,
+                    IsGhost = n.IsGhost
                 })],
                 Edges = [.. result.Edges.Select(e => new LayoutEdgeDto
                 {
@@ -107,7 +108,9 @@ public class LayoutController(
                     X1 = e.X1,
                     Y1 = e.Y1,
                     X2 = e.X2,
-                    Y2 = e.Y2
+                    Y2 = e.Y2,
+                    IsVertical = e.IsVertical,
+                    Direction = e.Direction.ToString()
                 })],
                 Width = result.Width,
                 Height = result.Height,

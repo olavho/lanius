@@ -411,6 +411,41 @@ public class LogicalLayoutEngine(
             });
         }
 
+        // Second pass: add a ghost (shadow-ref) node for each branch split.
+        // The ghost sits at (parentNode.X, childBranchY) — the vertical split edge anchors here,
+        // and the branch lane line starts here. Real commit positions are untouched.
+        var nodeDict = nodes.ToDictionary(n => n.CommitId);
+        var allCommitsDict = allCommits.ToDictionary(c => c.Sha);
+        var ghostNodes = new List<LayoutNode>();
+
+        foreach (var node in nodes)
+        {
+            if (!allCommitsDict.TryGetValue(node.CommitId, out var c2)) continue;
+            if (c2.IsMerge || c2.ParentShas.Count != 1) continue;
+
+            var parentSha = c2.ParentShas[0];
+            if (!nodeDict.TryGetValue(parentSha, out var parentNode)) continue;
+            if (parentNode.BranchName == node.BranchName) continue;  // same-branch parent
+            if (parentNode.X >= node.X) continue;                    // parent not to the left
+
+            ghostNodes.Add(new LayoutNode
+            {
+                CommitId = $"ghost:{node.CommitId}",
+                X = parentNode.X,
+                Y = node.Y,
+                Radius = 0,
+                BranchName = node.BranchName,
+                Timestamp = parentNode.Timestamp,
+                Message = string.Empty,
+                Author = string.Empty,
+                IsSignificant = false,
+                IsGhost = true,
+                GridRow = node.GridRow,
+                GridColumn = parentNode.GridColumn
+            });
+        }
+
+        nodes.AddRange(ghostNodes);
         return nodes;
     }
 
@@ -456,23 +491,32 @@ public class LogicalLayoutEngine(
                 if (parentBranch != childBranch && !string.IsNullOrEmpty(parentBranch) && !string.IsNullOrEmpty(childBranch))
                 {
                     var edgeKey = (parentSha, commit.Sha);
-                    if (processedEdges.Add(edgeKey))
-                    {
-                        // Determine edge type: if commit has multiple parents, it's a merge
-                        var edgeType = commit.ParentShas.Count > 1 ? EdgeType.Merge : EdgeType.Branch;
-
-                        edges.Add(new LayoutEdge
+                        if (processedEdges.Add(edgeKey))
                         {
-                            FromCommitId = parentSha,
-                            ToCommitId = commit.Sha,
-                            Type = edgeType,
-                            X1 = parentNode.X,
-                            Y1 = parentNode.Y,
-                            X2 = childNode.X,
-                            Y2 = childNode.Y,
-                            BranchName = childBranch // Edge belongs to the child branch
-                        });
-                    }
+                            // Determine edge type: if commit has multiple parents, it's a merge
+                            var edgeType = commit.ParentShas.Count > 1 ? EdgeType.Merge : EdgeType.Branch;
+
+                            // Branch (split) edges anchor at the parent commit's X so the line is
+                            // vertical from the parent branch down to the ghost node on the child branch.
+                            // Merge edges anchor at the child (merge) commit's X.
+                            var anchorX = edgeType == EdgeType.Branch ? parentNode.X : childNode.X;
+
+                            edges.Add(new LayoutEdge
+                            {
+                                FromCommitId = parentSha,
+                                ToCommitId = commit.Sha,
+                                Type = edgeType,
+                                X1 = anchorX,
+                                Y1 = parentNode.Y,
+                                X2 = anchorX,
+                                Y2 = childNode.Y,
+                                BranchName = childBranch,
+                                IsVertical = true,
+                                Direction = parentNode.Y < childNode.Y
+                                    ? EdgeDirection.Downward
+                                    : EdgeDirection.Upward
+                            });
+                        }
                 }
             }
         }
@@ -505,7 +549,9 @@ public class LogicalLayoutEngine(
                             Y1 = fromNode.Y,
                             X2 = toNode.X,
                             Y2 = toNode.Y,
-                            BranchName = branchName
+                            BranchName = branchName,
+                            IsVertical = false,
+                            Direction = EdgeDirection.Horizontal
                         });
                     }
                 }

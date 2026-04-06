@@ -22,6 +22,27 @@ public enum EdgeType
 }
 
 /// <summary>
+/// Direction of a cross-branch edge.
+/// </summary>
+public enum EdgeDirection
+{
+    /// <summary>
+    /// Edge runs horizontally (normal within-branch connection).
+    /// </summary>
+    Horizontal,
+
+    /// <summary>
+    /// Edge goes upward (decreasing Y) — merge into a higher branch lane.
+    /// </summary>
+    Upward,
+
+    /// <summary>
+    /// Edge goes downward (increasing Y) — split to a lower branch lane.
+    /// </summary>
+    Downward
+}
+
+/// <summary>
 /// Represents a connection between commits (branch line segment).
 /// </summary>
 public record LayoutEdge
@@ -65,4 +86,14 @@ public record LayoutEdge
     /// Branch this edge belongs to.
     /// </summary>
     public string? BranchName { get; init; }
+
+    /// <summary>
+    /// Whether this edge is vertical (X1 == X2); true for Branch and Merge type edges.
+    /// </summary>
+    public bool IsVertical { get; init; }
+
+    /// <summary>
+    /// Direction of travel for cross-branch edges.
+    /// </summary>
+    public EdgeDirection Direction { get; init; } = EdgeDirection.Horizontal;
 }

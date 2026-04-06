@@ -19,10 +19,10 @@ const Visualization = (() => {
     function getBranchClass(branchName) {
         const name = (branchName || '').toLowerCase().replace(/^origin\//, '');
         if (name === 'main' || name === 'master') return 'branch--main';
-        if (name.includes('release'))             return 'branch--release';
-        if (name.includes('feature'))             return 'branch--feature';
+        if (name.includes('release')) return 'branch--release';
+        if (name.includes('feature')) return 'branch--feature';
         if (name.includes('hotfix') || name.includes('fix')) return 'branch--fix';
-        if (name.includes('dependabot'))          return 'branch--dependabot';
+        if (name.includes('dependabot')) return 'branch--dependabot';
         return 'branch--other';
     }
 
@@ -34,6 +34,18 @@ const Visualization = (() => {
         svg = d3.select('#commit-graph')
             .attr('width', width)
             .attr('height', height);
+
+        // Inject arrowhead marker definitions for cross-branch edges
+        svg.append('defs').html(`
+            <marker id="arrow-merge" markerWidth="6" markerHeight="6" refX="5" refY="3"
+                    orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#FF9800"/>
+            </marker>
+            <marker id="arrow-branch" markerWidth="6" markerHeight="6" refX="5" refY="3"
+                    orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#4CAF50"/>
+            </marker>
+        `);
 
         g = svg.append('g')
             .attr('transform', `translate(${config.margin.left}, ${config.margin.top})`);
@@ -643,9 +655,9 @@ const Visualization = (() => {
         });
         setTimeout(() => edgeGroups.selectAll('.edge-line').classed('is-visible', true), 0);
 
-        // Render nodes (commits)
+        // Render nodes (commits) — exclude ghost/shadow-ref nodes (invisible anchors)
         const nodeGroups = g.selectAll('.commit-node')
-            .data(layout.nodes)
+            .data(layout.nodes.filter(n => !n.isGhost))
             .enter()
             .append('g')
             .attr('class', d => `commit-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branchName)}`)

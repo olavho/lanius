@@ -612,6 +612,9 @@ body {
 .edge-branch  .edge-line.is-visible,
 .edge-merge   .edge-line.is-visible { opacity: 0.7; }
 
+.edge-merge  .edge-line.is-visible { marker-end: url(#arrow-merge); }
+.edge-branch .edge-line.is-visible { marker-end: url(#arrow-branch); }
+
 /* Legacy render-path connections */
 .cross-branch-connection {
     stroke: var(--line-color-light);

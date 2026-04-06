@@ -59,4 +59,9 @@ public record LayoutNode
     /// Zero-based grid column (chronological commit index with per-row collision avoidance).
     /// </summary>
     public int GridColumn { get; init; }
+
+    /// <summary>
+    /// Ghost/shadow reference node — synthetic anchor for split edges. Not rendered as a commit circle.
+    /// </summary>
+    public bool IsGhost { get; init; }
 }

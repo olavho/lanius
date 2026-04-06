@@ -122,6 +122,11 @@ public class LayoutNodeDto
     /// Zero-based grid column (chronological commit index).
     /// </summary>
     public int GridColumn { get; init; }
+
+    /// <summary>
+    /// Ghost/shadow reference node — synthetic anchor, not rendered as a commit circle.
+    /// </summary>
+    public bool IsGhost { get; init; }
 }
 
 /// <summary>
@@ -168,4 +173,14 @@ public class LayoutEdgeDto
     /// End Y coordinate.
     /// </summary>
     public required double Y2 { get; init; }
+
+    /// <summary>
+    /// Whether this edge is vertical (X1 == X2).
+    /// </summary>
+    public bool IsVertical { get; init; }
+
+    /// <summary>
+    /// Direction of the edge: Horizontal, Upward, or Downward.
+    /// </summary>
+    public required string Direction { get; init; }
 }

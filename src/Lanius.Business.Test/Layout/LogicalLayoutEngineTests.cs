@@ -501,8 +501,8 @@ public class LogicalLayoutEngineTests
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
-        // Assert
-        Assert.HasCount(2, result.Nodes);
+        // Assert — ghost nodes are synthetic anchors; count only real commit nodes
+        Assert.HasCount(2, result.Nodes.Where(n => !n.IsGhost));
 
         // Should have branch edge from main1 to feature1
         var branchEdge = result.Edges.FirstOrDefault(e =>
@@ -582,8 +582,8 @@ public class LogicalLayoutEngineTests
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
-        // Assert
-        Assert.HasCount(3, result.Nodes);
+        // Assert — ghost nodes are synthetic anchors; count only real commit nodes
+        Assert.HasCount(3, result.Nodes.Where(n => !n.IsGhost));
 
         // Should have merge edge from feature1 to merge1
         var mergeEdge = result.Edges.FirstOrDefault(e =>
@@ -862,6 +862,147 @@ public class LogicalLayoutEngineTests
         Assert.AreEqual(0, mainNode.GridRow,     "main should be row 0");
         Assert.AreEqual(1, featureANode.GridRow, "feature/aaa should be row 1 (alphabetically before bbb)");
         Assert.AreEqual(2, featureBNode.GridRow, "feature/bbb should be row 2");
+    }
+
+    // ── Phase 4: Vertical split/merge edges ──────────────────────────────────
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchEdge_IsVertical_X1EqualsX2()
+    {
+        // Arrange: feature splits from main — resulting Branch edge must be vertical
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { MarginX = 100, ColumnWidth = 20.0, MarginY = 60, BranchSpacing = 40 };
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch    = new Branch { Name = "origin/main",    FullName = "refs/remotes/origin/main",    TipSha = "m1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1", IsRemote = true };
+
+        var mainCommit = new Commit
+        {
+            Sha = "m1", Author = "A", AuthorEmail = "a@b",
+            Timestamp = t0, Message = "main", ParentShas = []
+        };
+        var featureCommit = new Commit
+        {
+            Sha = "f1", Author = "A", AuthorEmail = "a@b",
+            Timestamp = t0.AddHours(1), Message = "feature", ParentShas = ["m1"]
+        };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"]    = [mainCommit],
+                ["origin/feature"] = [mainCommit, featureCommit]
+            });
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",    Tier = BranchTier.Main,    MergeBaseSha = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature", Tier = BranchTier.Feature, MergeBaseSha = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var branchEdge = result.Edges.First(e => e.Type == EdgeType.Branch);
+        Assert.IsTrue(branchEdge.IsVertical, "Branch edge must be vertical");
+        Assert.AreEqual(branchEdge.X1, branchEdge.X2, "Branch edge X1 must equal X2");
+        Assert.AreEqual(EdgeDirection.Downward, branchEdge.Direction, "Split goes from main (top) to feature (bottom)");
+
+        // X must be at the parent (main) commit's position — the ghost node anchors the split there
+        var mainNode = result.Nodes.First(n => n.CommitId == "m1");
+        Assert.AreEqual(mainNode.X, branchEdge.X1, "Branch edge X must be at parent (main) commit X");
+
+        // A ghost node must exist on the feature lane at the same X as the main commit
+        var ghostNode = result.Nodes.FirstOrDefault(n => n.CommitId == "ghost:f1");
+        Assert.IsNotNull(ghostNode, "Ghost node must exist for the branch split");
+        Assert.IsTrue(ghostNode.IsGhost, "Ghost node must have IsGhost=true");
+        Assert.AreEqual(mainNode.X, ghostNode.X, "Ghost node X must match parent (main) commit X");
+        Assert.AreEqual(0.0, ghostNode.Radius, "Ghost node radius must be 0");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MergeEdge_IsVertical_X1EqualsX2()
+    {
+        // Arrange: feature merges into main — resulting Merge edge must be vertical
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { MarginX = 100, ColumnWidth = 20.0, MarginY = 60, BranchSpacing = 40 };
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch    = new Branch { Name = "origin/main",    FullName = "refs/remotes/origin/main",    TipSha = "merge1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1",     IsRemote = true };
+
+        var baseCommit = new Commit
+        {
+            Sha = "base1", Author = "A", AuthorEmail = "a@b",
+            Timestamp = t0, Message = "base", ParentShas = []
+        };
+        var featureCommit = new Commit
+        {
+            Sha = "f1", Author = "A", AuthorEmail = "a@b",
+            Timestamp = t0.AddHours(1), Message = "feature", ParentShas = ["base1"]
+        };
+        var mergeCommit = new Commit
+        {
+            Sha = "merge1", Author = "A", AuthorEmail = "a@b",
+            Timestamp = t0.AddHours(2), Message = "merge", ParentShas = ["base1", "f1"]
+        };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"]    = [baseCommit, mergeCommit],
+                ["origin/feature"] = [baseCommit, featureCommit]
+            });
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",    Tier = BranchTier.Main,    MergeBaseSha = null, CommitCount = 2 },
+                new BranchHierarchyInfo { Name = "origin/feature", Tier = BranchTier.Feature, MergeBaseSha = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mergeEdge = result.Edges.First(e => e.Type == EdgeType.Merge);
+        Assert.IsTrue(mergeEdge.IsVertical, "Merge edge must be vertical");
+        Assert.AreEqual(mergeEdge.X1, mergeEdge.X2, "Merge edge X1 must equal X2");
+        Assert.AreEqual(EdgeDirection.Upward, mergeEdge.Direction, "Merge goes from feature (bottom) to main (top)");
+
+        // X should be at the merge commit's position
+        var mergeNode = result.Nodes.First(n => n.CommitId == "merge1");
+        Assert.AreEqual(mergeNode.X, mergeEdge.X1, "Merge edge X must be at merge commit X");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_NormalEdge_IsHorizontal()
+    {
+        // Arrange: two commits on same branch produce a horizontal Normal edge
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c2", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var normalEdge = result.Edges.First(e => e.Type == EdgeType.Normal);
+        Assert.IsFalse(normalEdge.IsVertical, "Normal edge must not be vertical");
+        Assert.AreEqual(EdgeDirection.Horizontal, normalEdge.Direction);
+        Assert.AreNotEqual(normalEdge.X1, normalEdge.X2, "Normal edge spans two different X positions");
     }
 }
 
