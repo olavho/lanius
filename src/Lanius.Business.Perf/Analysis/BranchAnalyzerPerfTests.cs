@@ -11,6 +11,7 @@ namespace Lanius.Business.Perf.Analysis;
 /// </summary>
 [TestClass]
 [TestCategory("Performance")]
+[Ignore("Performance testing - run manually when needed")]
 public class BranchAnalyzerPerfTests : PerfTestBase
 {
     [TestMethod]

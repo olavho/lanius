@@ -1028,5 +1028,155 @@
     "PhaseMs": {
       "AnalyzeBranchHierarchyAsync": 490
     }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateCalendarLayout_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\private\\apus",
+    "Timestamp": "2026-04-06T13:36:57.0004114+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_total": 110
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateCalendarLayout_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\reactive",
+    "Timestamp": "2026-04-06T13:36:57.3826271+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_total": 289
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateCalendarLayout_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\ai\\semantic-kernel",
+    "Timestamp": "2026-04-06T13:37:01.2675721+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_total": 3876
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateLogicalLayout_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\private\\apus",
+    "Timestamp": "2026-04-06T13:37:01.6135521+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_total": 314
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateLogicalLayout_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\reactive",
+    "Timestamp": "2026-04-06T13:37:05.4928167+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_total": 3833
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateLogicalLayout_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\ai\\semantic-kernel",
+    "Timestamp": "2026-04-06T13:37:13.9828003+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_total": 8482
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateLogicalLayout_WithBranchFilter_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\private\\apus",
+    "Timestamp": "2026-04-06T13:37:14.0068262+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_filtered_total": 12
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateLogicalLayout_WithBranchFilter_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\reactive",
+    "Timestamp": "2026-04-06T13:37:14.312073+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_filtered_total": 299
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "CalculateLogicalLayout_WithBranchFilter_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\ai\\semantic-kernel",
+    "Timestamp": "2026-04-06T13:37:15.0789041+00:00",
+    "PhaseMs": {
+      "CalculateLayoutAsync_filtered_total": 761
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "GetBranches_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\private\\apus",
+    "Timestamp": "2026-04-06T13:37:15.0912272+00:00",
+    "PhaseMs": {
+      "GetBranchesAsync": 6
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "GetBranches_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\reactive",
+    "Timestamp": "2026-04-06T13:37:15.1526417+00:00",
+    "PhaseMs": {
+      "GetBranchesAsync": 52
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "GetBranches_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\ai\\semantic-kernel",
+    "Timestamp": "2026-04-06T13:37:15.4265184+00:00",
+    "PhaseMs": {
+      "GetBranchesAsync": 263
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "AnalyzeBranchHierarchy_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\private\\apus",
+    "Timestamp": "2026-04-06T13:37:15.4570301+00:00",
+    "PhaseMs": {
+      "AnalyzeBranchHierarchyAsync": 8
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "AnalyzeBranchHierarchy_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\reactive",
+    "Timestamp": "2026-04-06T13:37:16.2147714+00:00",
+    "PhaseMs": {
+      "AnalyzeBranchHierarchyAsync": 685
+    }
+  },
+  {
+    "MachineName": "ZEN-02",
+    "DotNetVersion": "10.0.5",
+    "TestName": "AnalyzeBranchHierarchy_ReportsElapsedTime",
+    "RepositoryPath": "c:\\local\\public\\ai\\semantic-kernel",
+    "Timestamp": "2026-04-06T13:37:16.9185154+00:00",
+    "PhaseMs": {
+      "AnalyzeBranchHierarchyAsync": 461
+    }
   }
 ]

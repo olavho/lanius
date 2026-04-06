@@ -104,24 +104,15 @@ public class LogicalLayoutEngine(
         string? branchFilter,
         CancellationToken cancellationToken)
     {
-        // Always load all branches first so filtering can normalize names consistently
-        // (e.g. pattern "main" should match remote "origin/main").
-        var allBranches = (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken)).ToList();
-
         List<DomainBranch> branches;
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
-            branches = allBranches;
+            branches = (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken)).ToList();
         }
         else
         {
             var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            branches =
-            [
-                .. allBranches.Where(b =>
-                    MatchesAnyPattern(NormalizeBranchName(b.Name), patterns) ||
-                    MatchesAnyPattern(b.Name, patterns))
-            ];
+            branches = (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken)).ToList();
         }
 
         // Filter to origin/* branches only to avoid duplicate processing

@@ -12,6 +12,7 @@ namespace Lanius.Business.Perf.Layout;
 /// </summary>
 [TestClass]
 [TestCategory("Performance")]
+[Ignore("Performance testing - run manually when needed")]
 public class CalendarLayoutEnginePerfTests : PerfTestBase
 {
     [TestMethod]
