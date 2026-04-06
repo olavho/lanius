@@ -116,7 +116,7 @@ body {
     letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--fg-secondary);
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 0;
 }
 
 /* Controls */
@@ -424,17 +424,19 @@ body {
 /* SVG Styles */
 .commit-node {
     cursor: pointer;
-    transition: opacity 0.3s ease;
 }
 
 .commit-node circle {
+    stroke: var(--line-color);
     stroke-width: 1;
-    transition: all 0.3s ease;
+    opacity: 0;
+    transition: opacity 0.5s ease;
 }
+
+.commit-node.is-visible circle { opacity: 1; }
 
 .commit-node:hover circle {
     stroke-width: 2;
-    r: 6;
 }
 
 .commit-link {
@@ -448,7 +450,11 @@ body {
     stroke: var(--line-color);
     stroke-width: 1;
     fill: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
 }
+
+.branch-line.is-visible { opacity: 0.3; }
 
 .branch-label {
     font-family: var(--font-mono);
@@ -563,4 +569,264 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* =============================================
+   Phase 1 — SVG Semantic Classes
+   ============================================= */
+
+/* Branch type fills — used on .branch-indicator and inherited by child circles */
+.branch--main       { fill: #2d2d2d; }
+.branch--release    { fill: #4a90e2; }
+.branch--feature    { fill: #7ed321; }
+.branch--fix        { fill: #e74c3c; }
+.branch--dependabot { fill: #9b59b6; }
+.branch--other      { fill: #34495e; }
+
+/* Commit significance modifier */
+.commit-node.is-significant circle { stroke-width: 1.5; }
+
+/* Branch indicator: coloured square at lane start */
+.branch-indicator {
+    stroke: var(--line-color);
+    stroke-width: 1;
+    cursor: help;
+    opacity: 0;
+    transition: opacity 0.5s ease, stroke-width 0.15s ease;
+}
+
+.branch-indicator.is-visible               { opacity: 0.8; }
+.branch-indicator.is-visible:hover         { opacity: 1; stroke-width: 2; }
+
+/* Edges */
+.edge-line {
+    fill: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.edge-line.is-visible              { opacity: 0.4; }
+.edge-normal  .edge-line           { stroke: var(--line-color-light); stroke-width: 1; }
+.edge-branch  .edge-line           { stroke: #4CAF50; stroke-width: 2; stroke-dasharray: 5,5; }
+.edge-merge   .edge-line           { stroke: #FF9800; stroke-width: 2; stroke-dasharray: 3,3; }
+.edge-branch  .edge-line.is-visible,
+.edge-merge   .edge-line.is-visible { opacity: 0.7; }
+
+/* Legacy render-path connections */
+.cross-branch-connection {
+    stroke: var(--line-color-light);
+    stroke-width: 1;
+    stroke-dasharray: 3,3;
+    fill: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.cross-branch-connection.is-visible { opacity: 0.4; }
+
+.branch-connection {
+    stroke: var(--line-color-light);
+    stroke-width: 1;
+    fill: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.branch-connection.is-visible { opacity: 0.6; }
+
+/* Calendar nodes */
+.calendar-node circle {
+    fill: #4a90e2;
+    stroke: var(--line-color);
+    stroke-width: 1.5;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.calendar-node.is-visible circle { opacity: 0.7; }
+.calendar-node:hover circle      { stroke-width: 3; }
+
+.calendar-node text {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: bold;
+    fill: #fff;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.calendar-node.is-visible text { opacity: 1; }
+
+/* Calendar / timeline axis */
+.calendar-axis text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: bold;
+    fill: var(--fg-primary);
+}
+
+.calendar-axis line {
+    stroke: var(--line-color-subtle);
+    stroke-width: 1;
+    opacity: 0.4;
+}
+
+/* Timeline grid lines */
+.timeline-grid-line--year  { stroke: var(--line-color-subtle); stroke-width: 1;   opacity: 0.4; }
+.timeline-grid-line--month { stroke: var(--bg-tertiary);       stroke-width: 0.5; opacity: 0.15; }
+.timeline-grid-line--week  { stroke: var(--bg-tertiary);       stroke-width: 0.5; opacity: 0.08; }
+.timeline-grid-line--day   { stroke: var(--bg-tertiary);       stroke-width: 0.5; opacity: 0.05; }
+
+/* Timeline axis labels */
+.timeline-label--year {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: bold;
+    fill: var(--fg-primary);
+}
+
+.timeline-label--month {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    fill: var(--fg-muted);
+    opacity: 0.5;
+}
+
+.timeline-label--week {
+    font-family: var(--font-mono);
+    font-size: 7px;
+    fill: var(--fg-muted);
+    opacity: 0.4;
+}
+
+.timeline-label--day {
+    font-family: var(--font-mono);
+    font-size: 7px;
+    fill: var(--fg-muted);
+    opacity: 0.3;
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background: var(--bg-primary);
+    border: var(--line-width) solid var(--line-color);
+    padding: var(--spacing-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.tooltip.is-visible       { opacity: 1; }
+.tooltip-significant      { color: #2196F3; }
+
+/* Edge legend */
+.edge-legend {
+    position: absolute;
+    top: 70px;
+    right: 20px;
+    background: rgba(250, 250, 250, 0.95);
+    padding: var(--spacing-md);
+    border: var(--line-width) solid var(--line-color-subtle);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    z-index: 100;
+}
+
+.edge-legend-title {
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+}
+
+.edge-legend-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: 4px;
+}
+
+.edge-legend-item:last-child { margin-bottom: 0; }
+
+.edge-legend-line    { fill: none; }
+.edge-normal-sample  { stroke: var(--line-color-light); stroke-width: 1; }
+.edge-branch-sample  { stroke: #4CAF50; stroke-width: 2; stroke-dasharray: 5,5; }
+.edge-merge-sample   { stroke: #FF9800; stroke-width: 2; stroke-dasharray: 3,3; }
+
+/* Granularity sub-group — hidden until calendar mode active */
+#granularity-group            { display: none; }
+#granularity-group.is-visible { display: block; }
+
+/* =============================================
+   Phase 5 — Sidebar Collapsibility & Context
+   ============================================= */
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.panel-body {
+    margin-top: var(--spacing-md);
+    max-height: 800px;
+    overflow: hidden;
+    opacity: 1;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.2s ease;
+}
+
+.control-panel--collapsed .panel-body {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+}
+
+.panel-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    color: var(--fg-muted);
+    display: flex;
+    align-items: center;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.panel-toggle:hover { color: var(--fg-primary); }
+
+.panel-toggle-chevron {
+    display: inline-block;
+    font-size: 10px;
+    transition: transform 0.2s ease;
+    user-select: none;
+}
+
+.control-panel--collapsed .panel-toggle-chevron {
+    transform: rotate(-90deg);
+}
+
+/* Context visibility: hidden until sidebar gains .has-repo */
+.control-panel[data-requires-repo] {
+    display: none;
+}
+
+.sidebar.has-repo .control-panel[data-requires-repo] {
+    display: block;
+}
+
+/* Info text */
+.info-text {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--fg-muted);
+    margin-top: var(--spacing-xs);
+}
+
+/* Secondary button */
+.btn-secondary {
+    background: var(--bg-tertiary);
 }

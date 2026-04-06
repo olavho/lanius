@@ -21,121 +21,169 @@
         <!-- Main Content -->
         <div class="main-content">
             <!-- Sidebar Controls -->
-            <aside class="sidebar">
-                <section class="control-panel">
-                    <h2 class="panel-title">Repository</h2>
-                    <div class="control-group">
-                        <label class="control-label">Existing Repositories</label>
-                        <select id="repo-select" class="input-field">
-                            <option value="">-- Select or enter new URL --</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <input type="text" id="repo-url" class="input-field"
-                               placeholder="https://github.com/user/repo.git">
-                        <button id="clone-btn" class="btn btn-primary">Clone</button>
-                    </div>
-                    <div class="status-line" id="repo-status"></div>
-                </section>
-
-                <section class="control-panel">
-                    <h2 class="panel-title">Branch Filter</h2>
-                    <div class="control-group">
-                        <input type="text" id="branch-pattern" class="input-field"
-                               placeholder="main, release/*" value="">
-                        <button id="filter-btn" class="btn">Apply</button>
-                    </div>
-                </section>
-
-                <section class="control-panel">
-                    <h2 class="panel-title">Layout Mode</h2>
-                    <div class="control-group">
-                        <label class="control-label">Visualization Type</label>
-                        <select id="layout-mode" class="input-field">
-                            <option value="logical" selected>Logical (Branch Lines)</option>
-                            <option value="calendar">Calendar (Time Groups)</option>
-                        </select>
-                    </div>
-                    <div class="control-group" id="granularity-group" style="display: none;">
-                        <label class="control-label">Calendar Granularity</label>
-                        <select id="calendar-granularity" class="input-field">
-                            <option value="day">Day</option>
-                            <option value="week">Week</option>
-                            <option value="month" selected>Month</option>
-                            <option value="year">Year</option>
-                        </select>
-                    </div>
-                    <div class="info-text" id="layout-mode-info">
-                        <small>Shows commits on branch timelines</small>
-                    </div>
-                </section>
-
-                <section class="control-panel">
-                    <h2 class="panel-title">Replay Mode</h2>
-                    <div class="control-group">
-                        <label class="control-label">
-                            Speed: <span id="speed-display">1.0x</span>
-                        </label>
-                        <input type="range" id="speed-slider" class="slider"
-                               min="0.1" max="5" step="0.1" value="1.0">
-                    </div>
-                    <div class="button-row">
-                        <button id="replay-start" class="btn btn-primary">Start</button>
-                        <button id="replay-pause" class="btn" disabled>Pause</button>
-                        <button id="replay-resume" class="btn" disabled>Resume</button>
-                        <button id="replay-stop" class="btn" disabled>Stop</button>
-                    </div>
-                    <div class="status-line" id="replay-status"></div>
-                </section>
-
-                <!-- Zoom Controls -->
-                <section class="control-panel">
-                    <h2 class="panel-title">Zoom Controls</h2>
-                    <div class="button-row">
-                        <button id="zoom-in" class="btn btn-secondary" title="Zoom In (Ctrl++)">
-                            🔍+ Zoom In
-                        </button>
-                        <button id="zoom-out" class="btn btn-secondary" title="Zoom Out (Ctrl-)">
-                            🔍− Zoom Out
-                        </button>
-                        <button id="zoom-reset" class="btn btn-secondary" title="Reset Zoom (Ctrl+0)">
-                            ↺ Reset
+            <aside class="sidebar" id="sidebar">
+                <section class="control-panel" id="panel-repository">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Repository</h2>
+                        <button class="panel-toggle" aria-label="Toggle Repository panel">
+                            <span class="panel-toggle-chevron">▾</span>
                         </button>
                     </div>
-                    <div class="info-text">
-                        <small>Or use mouse wheel to zoom, click+drag to pan</small>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">Existing Repositories</label>
+                            <select id="repo-select" class="input-field">
+                                <option value="">-- Select or enter new URL --</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <input type="text" id="repo-url" class="input-field"
+                                   placeholder="https://github.com/user/repo.git">
+                            <button id="clone-btn" class="btn btn-primary">Clone</button>
+                        </div>
+                        <div class="status-line" id="repo-status"></div>
                     </div>
                 </section>
 
-                <section class="control-panel">
-                    <h2 class="panel-title">Statistics</h2>
-                    <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-label">Total Commits</div>
-                            <div class="stat-value" id="stat-commits">0</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Total Branches</div>
-                            <div class="stat-value" id="stat-branches">0</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Lines Added</div>
-                            <div class="stat-value stat-positive" id="stat-additions">+0</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Lines Removed</div>
-                            <div class="stat-value stat-negative" id="stat-deletions">-0</div>
+                <section class="control-panel" id="panel-statistics" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Statistics</h2>
+                        <button class="panel-toggle" aria-label="Toggle Statistics panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Total Commits</div>
+                                <div class="stat-value" id="stat-commits">0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Total Branches</div>
+                                <div class="stat-value" id="stat-branches">0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Lines Added</div>
+                                <div class="stat-value stat-positive" id="stat-additions">+0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Lines Removed</div>
+                                <div class="stat-value stat-negative" id="stat-deletions">-0</div>
+                            </div>
                         </div>
                     </div>
                 </section>
 
-                <section class="control-panel">
-                    <h2 class="panel-title">Real-Time Monitor</h2>
-                    <div class="button-row">
-                        <button id="monitor-start" class="btn">Start</button>
-                        <button id="monitor-stop" class="btn" disabled>Stop</button>
+                <section class="control-panel" id="panel-branch-filter" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Branch Filter</h2>
+                        <button class="panel-toggle" aria-label="Toggle Branch Filter panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
                     </div>
-                    <div class="status-line" id="monitor-status"></div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <input type="text" id="branch-pattern" class="input-field"
+                                   placeholder="main, release/*" value="">
+                            <button id="filter-btn" class="btn">Apply</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-layout" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Layout Mode</h2>
+                        <button class="panel-toggle" aria-label="Toggle Layout Mode panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">Visualization Type</label>
+                            <select id="layout-mode" class="input-field">
+                                <option value="logical" selected>Logical (Branch Lines)</option>
+                                <option value="calendar">Calendar (Time Groups)</option>
+                            </select>
+                        </div>
+                        <div class="control-group" id="granularity-group">
+                            <label class="control-label">Calendar Granularity</label>
+                            <select id="calendar-granularity" class="input-field">
+                                <option value="day">Day</option>
+                                <option value="week">Week</option>
+                                <option value="month" selected>Month</option>
+                                <option value="year">Year</option>
+                            </select>
+                        </div>
+                        <div class="info-text" id="layout-mode-info">
+                            <small>Shows commits on branch timelines</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-replay" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Replay Mode</h2>
+                        <button class="panel-toggle" aria-label="Toggle Replay Mode panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">
+                                Speed: <span id="speed-display">1.0x</span>
+                            </label>
+                            <input type="range" id="speed-slider" class="slider"
+                                   min="0.1" max="5" step="0.1" value="1.0">
+                        </div>
+                        <div class="button-row">
+                            <button id="replay-start" class="btn btn-primary">Start</button>
+                            <button id="replay-pause" class="btn" disabled>Pause</button>
+                            <button id="replay-resume" class="btn" disabled>Resume</button>
+                            <button id="replay-stop" class="btn" disabled>Stop</button>
+                        </div>
+                        <div class="status-line" id="replay-status"></div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-zoom" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Zoom Controls</h2>
+                        <button class="panel-toggle" aria-label="Toggle Zoom Controls panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="button-row">
+                            <button id="zoom-in" class="btn btn-secondary" title="Zoom In (Ctrl++)">
+                                🔍+ Zoom In
+                            </button>
+                            <button id="zoom-out" class="btn btn-secondary" title="Zoom Out (Ctrl-)">
+                                🔍− Zoom Out
+                            </button>
+                            <button id="zoom-reset" class="btn btn-secondary" title="Reset Zoom (Ctrl+0)">
+                                ↺ Reset
+                            </button>
+                        </div>
+                        <div class="info-text">
+                            <small>Or use mouse wheel to zoom, click+drag to pan</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-monitor" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Real-Time Monitor</h2>
+                        <button class="panel-toggle" aria-label="Toggle Real-Time Monitor panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="button-row">
+                            <button id="monitor-start" class="btn">Start</button>
+                            <button id="monitor-stop" class="btn" disabled>Stop</button>
+                        </div>
+                        <div class="status-line" id="monitor-status"></div>
+                    </div>
                 </section>
             </aside>
 

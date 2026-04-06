@@ -14,15 +14,17 @@ const Visualization = (() => {
         lineWidth: 1,
         branchSpacing: 40,
         zoomExtent: [0.1, 10], // 10% to 1000% zoom
-        colors: {
-            commitDefault: '#1a1a1a',
-            commitAdditions: '#2d2d2d',
-            commitDeletions: '#0a0a0a',
-            link: '#4a4a4a',
-            branchLine: '#1a1a1a',
-            branchLabel: '#666666'
-        }
     };
+
+    function getBranchClass(branchName) {
+        const name = (branchName || '').toLowerCase().replace(/^origin\//, '');
+        if (name === 'main' || name === 'master') return 'branch--main';
+        if (name.includes('release'))             return 'branch--release';
+        if (name.includes('feature'))             return 'branch--feature';
+        if (name.includes('hotfix') || name.includes('fix')) return 'branch--fix';
+        if (name.includes('dependabot'))          return 'branch--dependabot';
+        return 'branch--other';
+    }
 
     function initialize() {
         const container = document.getElementById('commit-graph');
@@ -125,28 +127,22 @@ const Visualization = (() => {
             const x = xScale(item.date);
 
             gridGroup.append('line')
+                .attr('class', 'timeline-grid-line--year')
                 .attr('x1', x)
-                .attr('y1', -10) // Start just above branches (was -config.margin.top + 30)
+                .attr('y1', -10)
                 .attr('x2', x)
-                .attr('y2', yScale.range()[1])
-                .attr('stroke', '#d0d0d0')
-                .attr('stroke-width', 1)
-                .attr('opacity', 0.4);
+                .attr('y2', yScale.range()[1]);
         });
 
-        // Draw labels at top for years - more compact positioning
         const labelGroup = g.append('g').attr('class', 'timeline-label');
 
         years.forEach(item => {
             const x = xScale(item.date);
 
-            // Draw year label - more compact positioning
             labelGroup.append('text')
+                .attr('class', 'timeline-label--year')
                 .attr('x', x + 5)
-                .attr('y', -20) // Closer to branches (was -config.margin.top + 25)
-                .attr('font-size', '11px')
-                .attr('font-weight', 'bold')
-                .attr('fill', config.colors.commitDefault)
+                .attr('y', -20)
                 .text(item.year);
         });
 
@@ -161,27 +157,21 @@ const Visualization = (() => {
             currentDate.setMonth(currentDate.getMonth() + 1);
         }
 
-        // Draw very light month lines (minimal visual impact)
         months.forEach(date => {
             const x = xScale(date);
 
             gridGroup.append('line')
+                .attr('class', 'timeline-grid-line--month')
                 .attr('x1', x)
-                .attr('y1', -5) // Start just above branches
+                .attr('y1', -5)
                 .attr('x2', x)
-                .attr('y2', yScale.range()[1])
-                .attr('stroke', '#f0f0f0')
-                .attr('stroke-width', 0.5)
-                .attr('opacity', 0.15);
+                .attr('y2', yScale.range()[1]);
 
-            // Add tiny month label (optional - can remove if too cluttered)
             const month = date.toLocaleDateString('en-US', { month: 'short' });
             labelGroup.append('text')
+                .attr('class', 'timeline-label--month')
                 .attr('x', x + 2)
-                .attr('y', -5) // Very close to branches (was -config.margin.top + 45)
-                .attr('font-size', '8px')
-                .attr('fill', '#aaa')
-                .attr('opacity', 0.5)
+                .attr('y', -5)
                 .text(month);
         });
     }
@@ -241,83 +231,31 @@ const Visualization = (() => {
 
             console.log(`  Line: ${lineStartX.toFixed(0)} ? ${lineEndX.toFixed(0)}, Y: ${y}`);
 
-            // Branch line - start at first commit, end at last commit
-            branchGroup.append('line')
+            const branchLine = branchGroup.append('line')
                 .attr('class', 'branch-line')
                 .attr('x1', lineStartX)
                 .attr('y1', y)
                 .attr('x2', lineEndX)
-                .attr('y2', y)
-                .attr('stroke', config.colors.branchLine)
-                .attr('stroke-width', config.lineWidth)
-                .attr('opacity', 0)
-                .transition()
-                .duration(500)
-                .attr('opacity', 0.3);
+                .attr('y2', y);
+            setTimeout(() => branchLine.classed('is-visible', true), 0);
 
-            // Branch indicator box - small colored box at start of line
             const fullName = branch.name.replace(/^origin\//, '');
             const boxSize = 8;
-            const boxX = lineStartX - 15; // Position box slightly before line start
+            const boxX = lineStartX - 15;
 
             const indicatorBox = branchGroup.append('rect')
-                .attr('class', 'branch-indicator')
+                .attr('class', `branch-indicator ${getBranchClass(branch.name)}`)
                 .attr('x', boxX)
                 .attr('y', y - boxSize / 2)
                 .attr('width', boxSize)
                 .attr('height', boxSize)
-                .attr('fill', getBranchColor(branch.name, i))
-                .attr('stroke', config.colors.commitDefault)
-                .attr('stroke-width', 1)
-                .attr('rx', 1) // Slight rounding
-                .style('cursor', 'help');
+                .attr('rx', 1);
 
-            // Add hover tooltip showing full branch name (BEFORE transition)
             indicatorBox.append('title').text(fullName);
-
-            // Add hover highlight effect (BEFORE transition)
-            indicatorBox.on('mouseenter', function () {
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr('opacity', 1)
-                    .attr('stroke-width', 2);
-            }).on('mouseleave', function () {
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr('opacity', 0.8)
-                    .attr('stroke-width', 1);
-            });
-
-            // Apply fade-in transition AFTER appending title and events
-            indicatorBox
-                .attr('opacity', 0)
-                .transition()
-                .duration(500)
-                .attr('opacity', 0.8);
+            setTimeout(() => indicatorBox.classed('is-visible', true), 0);
         });
 
         console.log('Branch rendering complete');
-    }
-
-    function getBranchColor(branchName, index) {
-        // Color based on branch type
-        if (branchName === 'main' || branchName === 'master' || branchName === 'origin/main') {
-            return '#2d2d2d'; // Dark for main
-        } else if (branchName.includes('release')) {
-            return '#4a90e2'; // Blue for releases
-        } else if (branchName.includes('feature')) {
-            return '#7ed321'; // Green for features
-        } else if (branchName.includes('hotfix') || branchName.includes('fix')) {
-            return '#e74c3c'; // Red for fixes
-        } else if (branchName.includes('dependabot')) {
-            return '#9b59b6'; // Purple for dependabot
-        } else {
-            // Use a color from palette based on index
-            const colors = ['#34495e', '#16a085', '#f39c12', '#e67e22', '#95a5a6'];
-            return colors[index % colors.length];
-        }
     }
 
     function renderCommits() {
@@ -364,16 +302,10 @@ const Visualization = (() => {
                     .attr('x1', xScale(new Date(mergeBaseCommit.timestamp)))
                     .attr('y1', getCommitY(mergeBaseCommit, branchYMap))
                     .attr('x2', xScale(new Date(firstCommitOnBranch.timestamp)))
-                    .attr('y2', getCommitY(firstCommitOnBranch, branchYMap))
-                    .attr('stroke', config.colors.link)
-                    .attr('stroke-width', config.lineWidth)
-                    .attr('stroke-dasharray', '3,3') // Dashed line for branch connections
-                    .attr('opacity', 0)
-                    .transition()
-                    .duration(500)
-                    .attr('opacity', 0.4);
+                    .attr('y2', getCommitY(firstCommitOnBranch, branchYMap));
             }
         });
+        setTimeout(() => g.selectAll('.cross-branch-connection').classed('is-visible', true), 0);
 
         // Draw branch connection lines (between commits on same branch)
         const branchLines = [];
@@ -420,20 +352,15 @@ const Visualization = (() => {
             .attr('x1', d => xScale(new Date(d.source.timestamp)))
             .attr('y1', d => getCommitY(d.source, branchYMap))
             .attr('x2', d => xScale(new Date(d.target.timestamp)))
-            .attr('y2', d => getCommitY(d.target, branchYMap))
-            .attr('stroke', config.colors.link)
-            .attr('stroke-width', config.lineWidth)
-            .attr('opacity', 0)
-            .transition()
-            .duration(500)
-            .attr('opacity', 0.6);
+            .attr('y2', d => getCommitY(d.target, branchYMap));
+        setTimeout(() => g.selectAll('.branch-connection').classed('is-visible', true), 0);
 
         // Draw commits
         const commitNodes = g.selectAll('.commit-node')
             .data(commitData)
             .enter()
             .append('g')
-            .attr('class', 'commit-node')
+            .attr('class', d => `commit-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branches?.[0])}`)
             .attr('transform', d => `translate(${xScale(new Date(d.timestamp))}, ${getCommitY(d, branchYMap)})`)
             .on('click', (event, d) => window.LaniusApp.showCommitDetail(d))
             .on('mouseenter', handleCommitHover)
@@ -441,12 +368,10 @@ const Visualization = (() => {
 
         commitNodes.append('circle')
             .attr('r', 0)
-            .attr('fill', d => getCommitColor(d))
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', config.lineWidth)
             .transition()
             .duration(500)
             .attr('r', d => getCommitSize(d));
+        setTimeout(() => g.selectAll('.commit-node').classed('is-visible', true), 0);
 
         // Update stats
         updateStatsFromCommits();
@@ -463,7 +388,7 @@ const Visualization = (() => {
 
         // Add commit node with animation
         const node = g.append('g')
-            .attr('class', 'commit-node fade-in')
+            .attr('class', `commit-node is-visible ${commit.isSignificant ? 'is-significant' : ''} ${getBranchClass(commit.branches?.[0])}`)
             .attr('transform', `translate(${x}, ${y})`)
             .on('click', (event, d) => window.LaniusApp.showCommitDetail(commit))
             .on('mouseenter', handleCommitHover)
@@ -471,27 +396,20 @@ const Visualization = (() => {
 
         node.append('circle')
             .attr('r', 0)
-            .attr('fill', getCommitColor(commit))
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', config.lineWidth)
-            .style('opacity', 0)
             .transition()
             .duration(750)
             .ease(d3.easeCubicOut)
-            .attr('r', getCommitSize(commit))
-            .style('opacity', 1);
+            .attr('r', getCommitSize(commit));
 
-        // Pulse animation
+        // Pulse animation (radius only)
         node.select('circle')
             .transition()
             .delay(750)
             .duration(1000)
             .attr('r', getCommitSize(commit) * 1.5)
-            .style('opacity', 0.4)
             .transition()
             .duration(500)
-            .attr('r', getCommitSize(commit))
-            .style('opacity', 1);
+            .attr('r', getCommitSize(commit));
     }
 
     function animateReplayCommit(commit) {
@@ -533,26 +451,6 @@ const Visualization = (() => {
         return config.commitRadius + (scale * 3);
     }
 
-    function getCommitColor(commit) {
-        if (!commit.stats) return config.colors.commitDefault;
-
-        const indicator = commit.stats.colorIndicator || 0;
-
-        // Monochrome gradient based on indicator
-        // -1 (deletions) to +1 (additions)
-        if (indicator > 0) {
-            // More additions: darker
-            const intensity = Math.floor(indicator * 30);
-            return `rgb(${45 - intensity}, ${45 - intensity}, ${45 - intensity})`;
-        } else if (indicator < 0) {
-            // More deletions: lighter
-            const intensity = Math.floor(Math.abs(indicator) * 20);
-            return `rgb(${10 + intensity}, ${10 + intensity}, ${10 + intensity})`;
-        }
-
-        return config.colors.commitDefault;
-    }
-
     function handleCommitHover(event, d) {
         const node = d3.select(event.currentTarget);
 
@@ -560,10 +458,8 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', config.commitRadiusHover)
-            .attr('stroke-width', 2);
+            .attr('r', config.commitRadiusHover);
 
-        // Show tooltip
         showTooltip(event, d);
     }
 
@@ -575,8 +471,7 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', getCommitSize(commit))
-            .attr('stroke-width', config.lineWidth);
+            .attr('r', getCommitSize(commit));
 
         hideTooltip();
     }
@@ -585,15 +480,8 @@ const Visualization = (() => {
         const tooltip = d3.select('body')
             .append('div')
             .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('background', '#fafafa')
-            .style('border', '1px solid #1a1a1a')
-            .style('padding', '8px')
-            .style('font-family', 'var(--font-mono)')
-            .style('font-size', '11px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('opacity', 0);
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px');
 
         tooltip.html(`
             <div><strong>${commit.shortMessage}</strong></div>
@@ -602,20 +490,11 @@ const Visualization = (() => {
             ${commit.stats ? `<div>+${commit.stats.linesAdded} -${commit.stats.linesRemoved}</div>` : ''}
         `);
 
-        tooltip
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 15) + 'px')
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
+        setTimeout(() => tooltip.classed('is-visible', true), 0);
     }
 
     function hideTooltip() {
-        d3.selectAll('.tooltip')
-            .transition()
-            .duration(200)
-            .style('opacity', 0)
-            .remove();
+        d3.selectAll('.tooltip').remove();
     }
 
     function updateStatsFromCommits() {
@@ -755,26 +634,21 @@ const Visualization = (() => {
 
             if (d.x1 !== undefined) {
                 edge.append('line')
+                    .attr('class', 'edge-line')
                     .attr('x1', d.x1)
                     .attr('y1', d.y1)
                     .attr('x2', d.x2)
-                    .attr('y2', d.y2)
-                    .attr('stroke', getEdgeColor(d.type))
-                    .attr('stroke-width', getEdgeWidth(d.type))
-                    .attr('stroke-dasharray', getEdgeDashArray(d.type))
-                    .attr('opacity', 0)
-                    .transition()
-                    .duration(500)
-                    .attr('opacity', getEdgeOpacity(d.type));
+                    .attr('y2', d.y2);
             }
         });
+        setTimeout(() => edgeGroups.selectAll('.edge-line').classed('is-visible', true), 0);
 
         // Render nodes (commits)
         const nodeGroups = g.selectAll('.commit-node')
             .data(layout.nodes)
             .enter()
             .append('g')
-            .attr('class', d => `commit-node ${d.isSignificant ? 'significant' : 'normal'}`)
+            .attr('class', d => `commit-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branchName)}`)
             .attr('transform', d => `translate(${d.x}, ${d.y})`)
             .on('click', (event, d) => showNodeDetail(d))
             .on('mouseenter', handleNodeHover)
@@ -782,12 +656,10 @@ const Visualization = (() => {
 
         nodeGroups.append('circle')
             .attr('r', 0)
-            .attr('fill', d => getNodeColor(d))
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', d => d.isSignificant ? 1.5 : 1)
             .transition()
             .duration(500)
             .attr('r', d => d.radius);
+        setTimeout(() => g.selectAll('.commit-node').classed('is-visible', true), 0);
 
         console.log('Logical layout rendered');
     }
@@ -807,35 +679,21 @@ const Visualization = (() => {
             .on('mouseenter', handleCalendarNodeHover)
             .on('mouseleave', handleCalendarNodeUnhover);
 
-        // Render as circles (size proportional to commit count)
         nodeGroups.append('circle')
             .attr('r', 0)
-            .attr('fill', '#4a90e2')
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', 1.5)
-            .attr('opacity', 0.7)
             .transition()
             .duration(500)
             .attr('r', d => d.radius);
 
-        // Add count labels for significant groups
         nodeGroups.filter(d => d.radius > 8)
             .append('text')
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle')
-            .attr('font-size', '10px')
-            .attr('font-weight', 'bold')
-            .attr('fill', '#fff')
-            .attr('pointer-events', 'none')
             .text(d => {
-                // Extract commit count from message (hacky but works for MVP)
                 const match = d.message.match(/(\d+) commits?/);
                 return match ? match[1] : '';
-            })
-            .attr('opacity', 0)
-            .transition()
-            .duration(500)
-            .attr('opacity', 1);
+            });
+        setTimeout(() => g.selectAll('.calendar-node').classed('is-visible', true), 0);
 
         // Add time axis
         renderCalendarTimeAxis(layout);
@@ -861,26 +719,18 @@ const Visualization = (() => {
             }
         });
 
-        // Draw labels
         timeLabels.forEach((x, label) => {
             axisGroup.append('text')
                 .attr('x', x)
                 .attr('y', -20)
                 .attr('text-anchor', 'middle')
-                .attr('font-size', '11px')
-                .attr('font-weight', 'bold')
-                .attr('fill', config.colors.commitDefault)
                 .text(label);
 
-            // Draw tick mark
             axisGroup.append('line')
                 .attr('x1', x)
                 .attr('y1', -10)
                 .attr('x2', x)
-                .attr('y2', layout.height - config.margin.top - config.margin.bottom)
-                .attr('stroke', '#d0d0d0')
-                .attr('stroke-width', 1)
-                .attr('opacity', 0.4);
+                .attr('y2', layout.height - config.margin.top - config.margin.bottom);
         });
     }
 
@@ -907,10 +757,8 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius * 1.3)
-            .attr('stroke-width', 3);
+            .attr('r', d.radius * 1.3);
 
-        // Show tooltip
         showCalendarNodeTooltip(event, d);
     }
 
@@ -921,8 +769,7 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius)
-            .attr('stroke-width', 1.5);
+            .attr('r', d.radius);
 
         hideTooltip();
     }
@@ -931,27 +778,15 @@ const Visualization = (() => {
         const tooltip = d3.select('body')
             .append('div')
             .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('background', '#fafafa')
-            .style('border', '1px solid #1a1a1a')
-            .style('padding', '8px')
-            .style('font-family', 'var(--font-mono)')
-            .style('font-size', '11px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('opacity', 0);
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px');
 
         tooltip.html(`
             <div><strong>${node.message || 'Calendar Group'}</strong></div>
             <div>${new Date(node.timestamp).toLocaleDateString()}</div>
         `);
 
-        tooltip
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 15) + 'px')
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
+        setTimeout(() => tooltip.classed('is-visible', true), 0);
     }
 
     function extractBranchInfo(nodes) {
@@ -983,116 +818,29 @@ const Visualization = (() => {
             const lineStartX = info.minX - 20;
             const lineEndX = info.maxX + 50;
 
-            branchGroup.append('line')
+            const branchLine = branchGroup.append('line')
                 .attr('class', 'branch-line')
                 .attr('x1', lineStartX)
                 .attr('y1', info.y)
                 .attr('x2', lineEndX)
-                .attr('y2', info.y)
-                .attr('stroke', config.colors.branchLine)
-                .attr('stroke-width', config.lineWidth)
-                .attr('opacity', 0)
-                .transition()
-                .duration(500)
-                .attr('opacity', 0.3);
+                .attr('y2', info.y);
+            setTimeout(() => branchLine.classed('is-visible', true), 0);
 
-            // Branch indicator box
             const boxSize = 8;
             const boxX = lineStartX - 15;
             const fullName = branchName.replace(/^origin\//, '');
 
             const indicator = branchGroup.append('rect')
-                .attr('class', 'branch-indicator')
+                .attr('class', `branch-indicator ${getBranchClass(branchName)}`)
                 .attr('x', boxX)
                 .attr('y', info.y - boxSize / 2)
                 .attr('width', boxSize)
                 .attr('height', boxSize)
-                .attr('fill', getBranchColor(branchName, info.index))
-                .attr('stroke', config.colors.commitDefault)
-                .attr('stroke-width', 1)
-                .attr('rx', 1)
-                .style('cursor', 'help')
-                .attr('opacity', 0);
+                .attr('rx', 1);
 
-            // Add tooltip
             indicator.append('title').text(fullName);
-
-            // Hover effects
-            indicator.on('mouseenter', function () {
-                d3.select(this)
-                    .transition().duration(200)
-                    .attr('opacity', 1)
-                    .attr('stroke-width', 2);
-            }).on('mouseleave', function () {
-                d3.select(this)
-                    .transition().duration(200)
-                    .attr('opacity', 0.8)
-                    .attr('stroke-width', 1);
-            });
-
-            // Fade in
-            indicator.transition().duration(500).attr('opacity', 0.8);
+            setTimeout(() => indicator.classed('is-visible', true), 0);
         });
-    }
-
-    function getEdgeColor(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-                return '#4CAF50'; // Green for branch splits
-            case 'Merge':
-                return '#FF9800'; // Orange for merges
-            case 'Normal':
-            default:
-                return config.colors.link; // Gray for normal connections
-        }
-    }
-
-    function getEdgeWidth(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-            case 'Merge':
-                return 2;
-            case 'Normal':
-            default:
-                return config.lineWidth;
-        }
-    }
-
-    function getEdgeDashArray(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-                return '5,5'; // Dashed for branches
-            case 'Merge':
-                return '3,3'; // Dashed for merges
-            case 'Normal':
-            default:
-                return null; // Solid for normal
-        }
-    }
-
-    function getEdgeOpacity(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-            case 'Merge':
-                return 0.7;
-            case 'Normal':
-            default:
-                return 0.4;
-        }
-    }
-
-    function getNodeColor(node) {
-        // Color based on branch
-        if (node.branchName === 'main' || node.branchName === 'master') {
-            return '#2d2d2d'; // Dark for main
-        } else if (node.branchName.includes('release')) {
-            return '#4a90e2'; // Blue for releases
-        } else if (node.branchName.includes('feature')) {
-            return '#7ed321'; // Green for features
-        } else if (node.branchName.includes('hotfix') || node.branchName.includes('fix')) {
-            return '#e74c3c'; // Red for fixes
-        }
-        return config.colors.commitDefault;
     }
 
     function showNodeDetail(node) {
@@ -1119,10 +867,8 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius * 1.5)
-            .attr('stroke-width', 2);
+            .attr('r', d.radius * 1.5);
 
-        // Show tooltip
         showNodeTooltip(event, d);
     }
 
@@ -1133,8 +879,7 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius)
-            .attr('stroke-width', d.isSignificant ? 1.5 : 1);
+            .attr('r', d.radius);
 
         hideTooltip();
     }
@@ -1143,30 +888,18 @@ const Visualization = (() => {
         const tooltip = d3.select('body')
             .append('div')
             .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('background', '#fafafa')
-            .style('border', '1px solid #1a1a1a')
-            .style('padding', '8px')
-            .style('font-family', 'var(--font-mono)')
-            .style('font-size', '11px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('opacity', 0);
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px');
 
         tooltip.html(`
             <div><strong>${node.message || 'Commit'}</strong></div>
             <div>${node.author || 'Unknown author'}</div>
             <div>${new Date(node.timestamp).toLocaleDateString()}</div>
             <div>Branch: ${node.branchName}</div>
-            ${node.isSignificant ? '<div style="color: #2196F3;">Significant commit</div>' : ''}
+            ${node.isSignificant ? '<div class="tooltip-significant">Significant commit</div>' : ''}
         `);
 
-        tooltip
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 15) + 'px')
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
+        setTimeout(() => tooltip.classed('is-visible', true), 0);
     }
 
     // Zoom control functions
