@@ -58,32 +58,44 @@ public class CommitAnalyzer(
     {
         return await Task.Run(() =>
         {
+            var sw = Stopwatch.StartNew();
             using var repo = OpenRepository(repositoryId);
+            logger.LogInformation("[PERF] OpenRepository (chronological): {ElapsedMs}ms", sw.ElapsedMilliseconds);
 
-            var commits = repo.Commits
+            sw.Restart();
+            var filter = new CommitFilter { SortBy = CommitSortStrategies.Time };
+            var commits = repo.Commits.QueryBy(filter)
                 .Where(c =>
                 {
                     var timestamp = c.Author.When;
                     return (!startDate.HasValue || timestamp >= startDate.Value) &&
                            (!endDate.HasValue || timestamp <= endDate.Value);
                 })
-                .OrderBy(c => c.Author.When)
                 .ToList();
+            logger.LogInformation("[PERF] Enumerate (chronological): {ElapsedMs}ms ({CommitCount} commits)", sw.ElapsedMilliseconds, commits.Count);
 
+            sw.Restart();
+            IReadOnlyList<DomainCommit> result;
             if (progress == null)
-                return commits.Select(c => MapCommit(c, repo)).ToList() as IReadOnlyList<DomainCommit>;
-
-            var total = commits.Count;
-            var reportInterval = Math.Max(1, total / 100);
-            var result = new List<DomainCommit>(total);
-            for (int i = 0; i < total; i++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                result.Add(MapCommit(commits[i], repo));
-                if (i % reportInterval == 0 || i == total - 1)
-                    progress.Report((i + 1, total));
+                result = commits.Select(MapCommitFast).ToList();
             }
-            return result as IReadOnlyList<DomainCommit>;
+            else
+            {
+                var total = commits.Count;
+                var reportInterval = Math.Max(1, total / 100);
+                var mapped = new List<DomainCommit>(total);
+                for (int i = 0; i < total; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    mapped.Add(MapCommitFast(commits[i]));
+                    if (i % reportInterval == 0 || i == total - 1)
+                        progress.Report((i + 1, total));
+                }
+                result = mapped;
+            }
+            logger.LogInformation("[PERF] Map (chronological): {ElapsedMs}ms ({CommitCount} commits)", sw.ElapsedMilliseconds, commits.Count);
+            return result;
         }, cancellationToken);
     }
 
@@ -128,6 +140,12 @@ public class CommitAnalyzer(
             Branches = branches
         };
     }
+
+    /// <summary>
+    /// Fast commit mapping for chronological (all-branches) walks.
+    /// Skips diff stats and branch lookup — branches are not known in this context.
+    /// </summary>
+    private static DomainCommit MapCommitFast(GitCommit gitCommit) => MapCommitFast(gitCommit, string.Empty);
 
     /// <summary>
     /// Fast commit mapping that skips expensive O(n²) GetBranchesForCommit lookup.
