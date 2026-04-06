@@ -3,6 +3,9 @@
 
 const Visualization = (() => {
     let svg, g, xScale, yScale, zoomBehavior;
+    let axisG = null;   // fixed SVG-space group for the sticky timeline axis
+    let axisScale = null; // d3 time scale for the axis (separate from xScale)
+    let currentLayout = null; // last layout passed to renderLayout()
     let commitData = [];
     let branchData = [];
     let currentZoom = d3.zoomIdentity; // Preserve zoom state across re-renders
@@ -50,6 +53,9 @@ const Visualization = (() => {
         g = svg.append('g')
             .attr('transform', `translate(${config.margin.left}, ${config.margin.top})`);
 
+        // Axis group sits above g in paint order; not zoomed — labels stay fixed in SVG space
+        axisG = svg.append('g').attr('class', 'timeline-axis');
+
         // Create scales
         xScale = d3.scaleTime()
             .range([0, width - config.margin.left - config.margin.right]);
@@ -63,6 +69,7 @@ const Visualization = (() => {
             .on('zoom', (event) => {
                 currentZoom = event.transform;
                 g.attr('transform', event.transform);
+                renderTimelineAxis();
             });
 
         // Apply zoom behavior to SVG
@@ -442,6 +449,9 @@ const Visualization = (() => {
 
     function clearAll() {
         g.selectAll('*').remove();
+        if (axisG) axisG.selectAll('*').remove();
+        axisScale = null;
+        currentLayout = null;
         commitData = [];
     }
 
@@ -528,6 +538,7 @@ const Visualization = (() => {
         yScale.range([0, height - config.margin.top - config.margin.bottom]);
 
         render(commitData, branchData);
+        renderTimelineAxis();
     }
 
     function debounce(func, wait) {
@@ -590,6 +601,8 @@ const Visualization = (() => {
         console.log('Edges:', layout.edges.length);
         console.log('Dimensions:', layout.width, 'x', layout.height);
 
+        currentLayout = layout;
+
         if (layout.nodes.length === 0) {
             console.warn('No nodes to render');
             clearAll();
@@ -602,8 +615,18 @@ const Visualization = (() => {
 
             // Update canvas dimensions based on layout
             const container = document.getElementById('commit-graph');
-            svg.attr('width', Math.max(layout.width, container.clientWidth))
-                .attr('height', Math.max(layout.height, container.clientHeight));
+            const svgW = Math.max(layout.width, container.clientWidth);
+            const svgH = Math.max(layout.height, container.clientHeight);
+            svg.attr('width', svgW).attr('height', svgH);
+
+            // Configure axis scale from layout time range
+            const minTs = layout.minTimestamp ? new Date(layout.minTimestamp) : null;
+            const maxTs = layout.maxTimestamp ? new Date(layout.maxTimestamp) : null;
+            if (minTs && maxTs && !isNaN(minTs) && !isNaN(maxTs)) {
+                axisScale = d3.scaleTime()
+                    .domain([minTs, maxTs])
+                    .range([config.margin.left, svgW - config.margin.right]);
+            }
 
             // Render based on layout mode
             if (layout.mode === 'Calendar') {
@@ -612,10 +635,9 @@ const Visualization = (() => {
                 renderLogicalLayout(layout);
             }
 
-            // Restore zoom state after rendering
-            if (currentZoom && currentZoom.k !== 1) {
-                g.attr('transform', currentZoom);
-            }
+            // Always apply zoom transform then redraw sticky axis
+            g.attr('transform', currentZoom);
+            renderTimelineAxis();
 
             console.log('=== renderLayout COMPLETE ===');
         } catch (error) {
@@ -707,42 +729,130 @@ const Visualization = (() => {
             });
         setTimeout(() => g.selectAll('.calendar-node').classed('is-visible', true), 0);
 
-        // Add time axis
-        renderCalendarTimeAxis(layout);
-
         console.log('Calendar layout rendered');
     }
 
-    function renderCalendarTimeAxis(layout) {
-        const axisGroup = g.append('g').attr('class', 'calendar-axis');
+    function renderTimelineAxis() {
+        if (!axisG) return;
 
-        // Extract unique time labels from nodes
-        const timeLabels = new Map();
-        layout.nodes.forEach(node => {
-            if (node.message) {
-                // Extract period label (e.g., "2024-04" from message)
-                const match = node.message.match(/^([\d-]+)/);
-                if (match) {
-                    const label = match[1];
-                    if (!timeLabels.has(label)) {
-                        timeLabels.set(label, node.x);
-                    }
-                }
-            }
+        // Calendar mode: ticks are anchored to node positions, not a continuous time scale
+        if (currentLayout?.mode === 'Calendar') {
+            renderCalendarAxis();
+            return;
+        }
+
+        if (!axisScale) return;
+
+        axisG.selectAll('*').remove();
+
+        const svgW = parseFloat(svg.attr('width')) || 1200;
+        const svgH = parseFloat(svg.attr('height')) || 600;
+
+        // Sync range to current SVG width (handles resize)
+        axisScale.range([config.margin.left, svgW - config.margin.right]);
+
+        const k = currentZoom.k;
+        const rescaledX = currentZoom.rescaleX(axisScale);
+
+        // Visible date range in current viewport
+        const visibleMin = rescaledX.invert(0);
+        const visibleMax = rescaledX.invert(svgW);
+
+        // Tier rows stacked top-to-bottom inside config.margin.top (60px) space.
+        // labelY = SVG text baseline; grid lines span full SVG height.
+        const tiers = [
+            { name: 'year',  interval: d3.timeYear,  labelFn: d => d.getFullYear(),                                                    labelY: 50, minK: 0   },
+            { name: 'month', interval: d3.timeMonth, labelFn: d => d.toLocaleDateString('en-US', { month: 'short' }),                  labelY: 37, minK: 0.3 },
+            { name: 'week',  interval: d3.timeWeek,  labelFn: d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), labelY: 25, minK: 1.0 },
+            { name: 'day',   interval: d3.timeDay,   labelFn: d => d.getDate(),                                                        labelY: 14, minK: 3.0 },
+        ];
+
+        tiers.forEach(({ name, interval, labelFn, labelY, minK }) => {
+            if (k < minK) return;
+
+            const ticks = interval.range(
+                interval.floor(visibleMin),
+                interval.ceil(visibleMax)
+            );
+
+            ticks.forEach(date => {
+                const x = rescaledX(date);
+                if (x < -50 || x > svgW + 50) return;
+
+                axisG.append('line')
+                    .attr('class', `timeline-grid-line--${name}`)
+                    .attr('x1', x).attr('y1', 0)
+                    .attr('x2', x).attr('y2', svgH);
+
+                axisG.append('text')
+                    .attr('class', `timeline-label--${name}`)
+                    .attr('x', x + 3).attr('y', labelY)
+                    .text(labelFn(date));
+            });
         });
+    }
 
-        timeLabels.forEach((x, label) => {
-            axisGroup.append('text')
-                .attr('x', x)
-                .attr('y', -20)
-                .attr('text-anchor', 'middle')
-                .text(label);
+    function renderCalendarAxis() {
+        if (!axisG || !currentLayout?.nodes?.length) return;
 
-            axisGroup.append('line')
-                .attr('x1', x)
-                .attr('y1', -10)
-                .attr('x2', x)
-                .attr('y2', layout.height - config.margin.top - config.margin.bottom);
+        axisG.selectAll('*').remove();
+
+        const svgW = parseFloat(svg.attr('width')) || 1200;
+        const svgH = parseFloat(svg.attr('height')) || 600;
+
+        const nodes = currentLayout.nodes
+            .slice()
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        // Infer granularity from median spacing between adjacent node timestamps
+        let granularity = 'month';
+        if (nodes.length >= 2) {
+            const dt = (new Date(nodes[1].timestamp) - new Date(nodes[0].timestamp)) / (1000 * 60 * 60 * 24);
+            if (dt < 2) granularity = 'day';
+            else if (dt < 10) granularity = 'week';
+            else if (dt > 300) granularity = 'year';
+        }
+
+        let lastYear = null;
+
+        nodes.forEach(node => {
+            // Map node g-space X to SVG space using current zoom transform
+            const svgX = currentZoom.applyX(node.x);
+            if (svgX < -50 || svgX > svgW + 50) return;
+
+            const date = new Date(node.timestamp);
+            const year = date.getFullYear();
+            const isNewYear = year !== lastYear;
+
+            const tierName = isNewYear ? 'year' : 'month';
+            const labelY   = isNewYear ? 50 : 37;
+
+            axisG.append('line')
+                .attr('class', `timeline-grid-line--${tierName}`)
+                .attr('x1', svgX).attr('y1', 0)
+                .attr('x2', svgX).attr('y2', svgH);
+
+            if (isNewYear) {
+                axisG.append('text')
+                    .attr('class', 'timeline-label--year')
+                    .attr('x', svgX + 3).attr('y', labelY)
+                    .text(year);
+            }
+
+            if (granularity !== 'year') {
+                let label;
+                if (granularity === 'day' || granularity === 'week') {
+                    label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                } else {
+                    label = date.toLocaleDateString('en-US', { month: 'short' });
+                }
+                axisG.append('text')
+                    .attr('class', 'timeline-label--month')
+                    .attr('x', svgX + 3).attr('y', 37)
+                    .text(label);
+            }
+
+            lastYear = year;
         });
     }
 
