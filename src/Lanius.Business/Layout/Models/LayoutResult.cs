@@ -49,4 +49,14 @@ public record LayoutResult
     /// Number of branches included in layout.
     /// </summary>
     public int TotalBranches { get; init; }
+
+    /// <summary>
+    /// Number of branch rows in the grid.
+    /// </summary>
+    public int RowCount { get; init; }
+
+    /// <summary>
+    /// Number of time columns in the grid (equals the highest GridColumn + 1).
+    /// </summary>
+    public int ColumnCount { get; init; }
 }

@@ -49,4 +49,9 @@ public record LayoutOptions
     /// Vertical margin (pixels).
     /// </summary>
     public double MarginY { get; init; } = 60;
+
+    /// <summary>
+    /// Width of a single grid column in pixels.
+    /// </summary>
+    public double ColumnWidth { get; init; } = 20.0;
 }

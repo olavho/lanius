@@ -49,4 +49,14 @@ public record LayoutNode
     /// Is this a significant commit (merge, split, branch head)?
     /// </summary>
     public bool IsSignificant { get; init; }
+
+    /// <summary>
+    /// Zero-based grid row (branch lane index).
+    /// </summary>
+    public int GridRow { get; init; }
+
+    /// <summary>
+    /// Zero-based grid column (chronological commit index with per-row collision avoidance).
+    /// </summary>
+    public int GridColumn { get; init; }
 }

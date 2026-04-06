@@ -51,6 +51,16 @@ public class LayoutResponse
     /// Total number of branches included in the layout.
     /// </summary>
     public int TotalBranches { get; init; }
+
+    /// <summary>
+    /// Number of branch rows in the grid.
+    /// </summary>
+    public int RowCount { get; init; }
+
+    /// <summary>
+    /// Number of time columns in the grid.
+    /// </summary>
+    public int ColumnCount { get; init; }
 }
 
 /// <summary>
@@ -102,6 +112,16 @@ public class LayoutNodeDto
     /// Whether this is a significant commit (merge, tag, etc.).
     /// </summary>
     public bool IsSignificant { get; init; }
+
+    /// <summary>
+    /// Zero-based grid row (branch lane index).
+    /// </summary>
+    public int GridRow { get; init; }
+
+    /// <summary>
+    /// Zero-based grid column (chronological commit index).
+    /// </summary>
+    public int GridColumn { get; init; }
 }
 
 /// <summary>

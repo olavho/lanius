@@ -599,5 +599,140 @@ public class LogicalLayoutEngineTests
         Assert.IsTrue(mergeNode.IsSignificant);
         Assert.AreEqual(6, mergeNode.Radius);
     }
+
+    // ── Phase 2: Grid coordinate tests ──────────────────────────────────────
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_SingleBranch_GridColumnsAreChronological()
+    {
+        // Arrange
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+        var commit3 = new Commit { Sha = "c3", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2, commit3] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var nodes = result.Nodes.OrderBy(n => n.Timestamp).ToList();
+        Assert.AreEqual(0, nodes[0].GridColumn, "Earliest commit should be column 0");
+        Assert.AreEqual(1, nodes[1].GridColumn, "Middle commit should be column 1");
+        Assert.AreEqual(2, nodes[2].GridColumn, "Latest commit should be column 2");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_SingleBranch_NoColumnCollisionsOnSameRow()
+    {
+        // Arrange: three commits at the same timestamp (maximum collision risk)
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
+        var sameTime = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "aaa", Author = "A", AuthorEmail = "a@b", Timestamp = sameTime, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "bbb", Author = "A", AuthorEmail = "a@b", Timestamp = sameTime, Message = "2", ParentShas = [] };
+        var commit3 = new Commit { Sha = "ccc", Author = "A", AuthorEmail = "a@b", Timestamp = sameTime, Message = "3", ParentShas = [] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2, commit3] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert: all three on the same row — each must have a unique column
+        var columnsOnRow0 = result.Nodes.Where(n => n.GridRow == 0).Select(n => n.GridColumn).ToList();
+        Assert.HasCount(3, columnsOnRow0);
+        Assert.AreEqual(columnsOnRow0.Count, columnsOnRow0.Distinct().Count(), "No two nodes on the same row should share a column");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MultipleBranches_GridRowsMatchBranchOrder()
+    {
+        // Arrange: two branches — 'origin/develop' sorts before 'origin/main' alphabetically
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { BranchSpacing = 40, MarginY = 60 };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
+        var devBranch = new Branch { Name = "origin/develop", FullName = "refs/remotes/origin/develop", TipSha = "d1", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var mainCommit = new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Timestamp = t0, Message = "main", ParentShas = [] };
+        var devCommit = new Commit { Sha = "d1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "dev", ParentShas = [] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([mainBranch, devBranch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [mainCommit], ["origin/develop"] = [devCommit] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert: origin/develop (row 0) and origin/main (row 1)
+        var devNode = result.Nodes.First(n => n.BranchName == "origin/develop");
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
+
+        Assert.AreEqual(0, devNode.GridRow, "origin/develop should be row 0 (alphabetically first)");
+        Assert.AreEqual(1, mainNode.GridRow, "origin/main should be row 1");
+        Assert.AreEqual(options.MarginY, devNode.Y, "Row 0 Y = MarginY");
+        Assert.AreEqual(options.MarginY + options.BranchSpacing, mainNode.Y, "Row 1 Y = MarginY + BranchSpacing");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_ThreeCommits_LayoutResultHasCorrectRowAndColumnCount()
+    {
+        // Arrange
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commits = new List<Commit>
+        {
+            new() { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "1", ParentShas = [] },
+            new() { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] },
+            new() { Sha = "c3", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] }
+        };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = commits });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        Assert.AreEqual(1, result.RowCount, "One branch = one row");
+        Assert.AreEqual(3, result.ColumnCount, "Three commits = three columns");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_GridColumnX_MatchesMarginPlusColumnTimesWidth()
+    {
+        // Arrange
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { MarginX = 50, ColumnWidth = 25.0 };
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c2", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert: X = MarginX + GridColumn * ColumnWidth
+        foreach (var node in result.Nodes)
+        {
+            var expectedX = options.MarginX + node.GridColumn * options.ColumnWidth;
+            Assert.AreEqual(expectedX, node.X, $"Node {node.CommitId}: X should equal MarginX + GridColumn * ColumnWidth");
+        }
+    }
 }
 

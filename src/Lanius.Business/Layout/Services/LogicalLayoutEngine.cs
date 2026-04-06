@@ -62,12 +62,12 @@ public class LogicalLayoutEngine(
 
         progress?.Report(new LayoutProgress(60, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
 
-        // Assign Y lanes to branches
-        var branchLanes = AssignBranchLanes(branches, options);
+        // Assign branch rows (0-based lane indices)
+        var branchRows = AssignBranchLanes(branches, options);
 
         // Calculate node positions
         sw.Restart();
-        var nodes = CalculateNodePositions(allCommits, branchCommits, branchLanes, options);
+        var nodes = CalculateNodePositions(allCommits, branchCommits, branchRows, options);
         _logger.LogInformation("[PERF] CalculateNodes: {ElapsedMs}ms ({NodeCount} nodes)", sw.ElapsedMilliseconds, nodes.Count);
 
         progress?.Report(new LayoutProgress(80, $"Calculating edges for {nodes.Count} nodes", nodes.Count, nodes.Count));
@@ -95,7 +95,9 @@ public class LogicalLayoutEngine(
             MinTimestamp = allCommits.Min(c => c.Timestamp),
             MaxTimestamp = allCommits.Max(c => c.Timestamp),
             TotalCommits = allCommits.Count,
-            TotalBranches = branches.Count
+            TotalBranches = branches.Count,
+            RowCount = branchRows.Count,
+            ColumnCount = nodes.Count > 0 ? nodes.Max(n => n.GridColumn) + 1 : 0
         };
     }
 
@@ -305,43 +307,33 @@ public class LogicalLayoutEngine(
         });
     }
 
-    private static Dictionary<string, double> AssignBranchLanes(
+    private static Dictionary<string, int> AssignBranchLanes(
         List<DomainBranch> branches,
         LayoutOptions options)
     {
-        var lanes = new Dictionary<string, double>();
-        double currentY = options.MarginY;
-
+        var rows = new Dictionary<string, int>();
+        int row = 0;
         foreach (var branch in branches.OrderBy(b => b.Name))
         {
-            lanes[branch.Name] = currentY;
-            currentY += options.BranchSpacing;
+            rows[branch.Name] = row++;
         }
-
-        return lanes;
+        return rows;
     }
 
     private static List<LayoutNode> CalculateNodePositions(
         List<DomainCommit> allCommits,
         Dictionary<string, List<DomainCommit>> branchCommits,
-        Dictionary<string, double> branchLanes,
+        Dictionary<string, int> branchRows,
         LayoutOptions options)
     {
         var nodes = new List<LayoutNode>();
 
-        // Sort commits chronologically
-        var sortedCommits = allCommits.OrderBy(c => c.Timestamp).ToList();
-        var minTime = sortedCommits.First().Timestamp;
-        var maxTime = sortedCommits.Last().Timestamp;
-        var timeRange = (maxTime - minTime).TotalSeconds;
+        // Sort commits chronologically; ties broken by SHA for determinism
+        var sortedCommits = allCommits.OrderBy(c => c.Timestamp).ThenBy(c => c.Sha).ToList();
 
-        if (timeRange == 0)
-        {
-            timeRange = 1; // Avoid division by zero
-        }
-
-        // Available width for timeline
-        var availableWidth = options.CanvasWidth - (2 * options.MarginX);
+        // Track the next available column per row to prevent two nodes on the
+        // same branch lane from sharing a column (handles identical timestamps).
+        var nextColumnPerRow = new Dictionary<int, int>();
 
         // Create lookup: commit SHA -> branches it belongs to
         var commitToBranches = new Dictionary<string, List<string>>();
@@ -354,29 +346,33 @@ public class LogicalLayoutEngine(
                     value = [];
                     commitToBranches[commit.Sha] = value;
                 }
-
                 value.Add(branchName);
             }
         }
 
-        foreach (var commit in sortedCommits)
+        for (int globalIndex = 0; globalIndex < sortedCommits.Count; globalIndex++)
         {
-            // Find primary branch (prefer main/master, including origin/main|origin/master)
+            var commit = sortedCommits[globalIndex];
+
+            // Find primary branch (prefer main/master)
             var commitBranches = commitToBranches.GetValueOrDefault(commit.Sha, []);
-            var primaryBranch = commitBranches.OrderBy(b =>
-                NormalizeBranchName(b) == "main" ? 0 :
-                NormalizeBranchName(b) == "master" ? 1 : 2)
+            var primaryBranch = commitBranches
+                .OrderBy(b => NormalizeBranchName(b) == "main" ? 0 :
+                               NormalizeBranchName(b) == "master" ? 1 : 2)
                 .ThenBy(b => b)
                 .FirstOrDefault() ?? "unknown";
 
-            // Calculate X position based on timestamp
-            var timeDelta = (commit.Timestamp - minTime).TotalSeconds;
-            var x = options.MarginX + (timeDelta / timeRange * availableWidth);
+            var gridRow = branchRows.GetValueOrDefault(primaryBranch, 0);
 
-            // Get Y position from branch lane
-            var y = branchLanes.GetValueOrDefault(primaryBranch, options.MarginY);
+            // Assign the next available column for this row, but never go below
+            // the global chronological index (preserves left-to-right time order).
+            var minColumn = nextColumnPerRow.GetValueOrDefault(gridRow, 0);
+            var gridColumn = Math.Max(globalIndex, minColumn);
+            nextColumnPerRow[gridRow] = gridColumn + 1;
 
-            // Determine if significant (merge commits)
+            var x = options.MarginX + gridColumn * options.ColumnWidth;
+            var y = options.MarginY + gridRow * options.BranchSpacing;
+
             var isSignificant = commit.IsMerge;
 
             nodes.Add(new LayoutNode
@@ -389,7 +385,9 @@ public class LogicalLayoutEngine(
                 Timestamp = commit.Timestamp,
                 Message = commit.Message,
                 Author = commit.Author,
-                IsSignificant = isSignificant
+                IsSignificant = isSignificant,
+                GridRow = gridRow,
+                GridColumn = gridColumn
             });
         }
 

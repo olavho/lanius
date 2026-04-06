@@ -94,7 +94,9 @@ public class LayoutController(
                     Timestamp = n.Timestamp,
                     Message = n.Message,
                     Author = n.Author,
-                    IsSignificant = n.IsSignificant
+                    IsSignificant = n.IsSignificant,
+                    GridRow = n.GridRow,
+                    GridColumn = n.GridColumn
                 })],
                 Edges = [.. result.Edges.Select(e => new LayoutEdgeDto
                 {
@@ -112,7 +114,9 @@ public class LayoutController(
                 MinTimestamp = result.MinTimestamp,
                 MaxTimestamp = result.MaxTimestamp,
                 TotalCommits = result.TotalCommits,
-                TotalBranches = result.TotalBranches
+                TotalBranches = result.TotalBranches,
+                RowCount = result.RowCount,
+                ColumnCount = result.ColumnCount
             };
 
             logger.LogInformation(
