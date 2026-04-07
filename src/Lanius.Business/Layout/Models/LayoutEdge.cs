@@ -96,4 +96,10 @@ public record LayoutEdge
     /// Direction of travel for cross-branch edges.
     /// </summary>
     public EdgeDirection Direction { get; init; } = EdgeDirection.Horizontal;
+
+    /// <summary>
+    /// True when the time gap between the two endpoints exceeds 14 days.
+    /// The frontend can render long-span edges as dashed to indicate the gap.
+    /// </summary>
+    public bool IsLongSpan { get; init; }
 }

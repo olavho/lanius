@@ -124,9 +124,13 @@ function initializeEventHandlers() {
         const infoText = document.getElementById('layout-mode-info');
 
         granularityGroup.classList.toggle('is-visible', state.layoutMode === 'calendar');
-        infoText.innerHTML = state.layoutMode === 'calendar'
-            ? '<small>Groups commits by time periods</small>'
-            : '<small>Shows commits on branch timelines</small>';
+        if (state.layoutMode === 'calendar') {
+            infoText.innerHTML = '<small>Groups commits by time periods</small>';
+        } else if (state.layoutMode === 'timeline') {
+            infoText.innerHTML = '<small>Shows each commit at its actual date position</small>';
+        } else {
+            infoText.innerHTML = '<small>Shows commits on branch timelines</small>';
+        }
 
         // Reload layout with new mode if repository is loaded
         if (state.repositoryId) {
@@ -495,7 +499,8 @@ async function startReplay() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     speed: state.replaySpeed,
-                    branchFilter: replayBranch
+                    branchFilter: replayBranch,
+                    startFromBranchSplit: !['main', 'master', 'origin/main', 'origin/master'].includes(replayBranch.toLowerCase())
                 })
             }
         );

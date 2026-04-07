@@ -29,4 +29,10 @@ public record ReplayOptions
     /// Zero-based index of the first commit to stream (used for scrub/seek).
     /// </summary>
     public int StartIndex { get; init; } = 0;
+
+    /// <summary>
+    /// When true and BranchFilter is a non-main branch, replay starts from the
+    /// branch split point (merge base) rather than the very first repository commit.
+    /// </summary>
+    public bool StartFromBranchSplit { get; init; } = false;
 }

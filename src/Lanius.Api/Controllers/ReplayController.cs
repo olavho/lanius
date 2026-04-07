@@ -38,7 +38,8 @@ public class ReplayController(
                 Speed = request.Speed,
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
-                BranchFilter = request.BranchFilter
+                BranchFilter = request.BranchFilter,
+                StartFromBranchSplit = request.StartFromBranchSplit
             };
 
             var session = await replayService.StartReplayAsync(repositoryId, options, cancellationToken);

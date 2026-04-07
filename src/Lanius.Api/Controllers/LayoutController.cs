@@ -60,6 +60,7 @@ public class LayoutController(
             {
                 LayoutMode.Logical => serviceProvider.GetRequiredService<LogicalLayoutEngine>(),
                 LayoutMode.Calendar => serviceProvider.GetRequiredService<CalendarLayoutEngine>(),
+                LayoutMode.Timeline => serviceProvider.GetRequiredService<TimelineLayoutEngine>(),
                 _ => throw new ArgumentException($"Unsupported layout mode: {mode}")
             };
 

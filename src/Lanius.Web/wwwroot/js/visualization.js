@@ -538,7 +538,9 @@ const Visualization = (() => {
         yScale.range([0, height - config.margin.top - config.margin.bottom]);
 
         render(commitData, branchData);
-        renderTimelineAxis();
+        if (currentLayout?.mode === 'Timeline') {
+            renderTimelineAxis();
+        }
     }
 
     function debounce(func, wait) {
@@ -635,9 +637,13 @@ const Visualization = (() => {
                 renderLogicalLayout(layout);
             }
 
-            // Always apply zoom transform then redraw sticky axis
+            // Apply zoom transform; axis is only meaningful for Timeline mode
             g.attr('transform', currentZoom);
-            renderTimelineAxis();
+            if (layout.mode === 'Timeline') {
+                renderTimelineAxis();
+            } else if (axisG) {
+                axisG.selectAll('*').remove();
+            }
 
             console.log('=== renderLayout COMPLETE ===');
         } catch (error) {
@@ -661,7 +667,7 @@ const Visualization = (() => {
             .data(layout.edges)
             .enter()
             .append('g')
-            .attr('class', d => `edge edge-${d.type.toLowerCase()}`);
+            .attr('class', d => `edge edge-${d.type.toLowerCase()}${d.isLongSpan ? ' edge-longspan' : ''}`);
 
         edgeGroups.each(function (d) {
             const edge = d3.select(this);

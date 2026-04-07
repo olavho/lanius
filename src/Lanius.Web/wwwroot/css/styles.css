@@ -687,6 +687,14 @@ body {
     marker-end: url(#arrow-branch);
 }
 
+.edge-longspan .edge-line {
+    stroke-dasharray: 4, 10;
+}
+
+.edge-longspan .edge-line.is-visible {
+    opacity: 0.2;
+}
+
 /* Legacy render-path connections */
 .cross-branch-connection {
     stroke: var(--line-color-light);
