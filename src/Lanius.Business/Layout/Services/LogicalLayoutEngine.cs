@@ -63,7 +63,7 @@ public class LogicalLayoutEngine(
         progress?.Report(new LayoutProgress(60, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
 
         // Assign branch rows (0-based lane indices)
-        var branchRows = AssignBranchLanes(branches, hierarchyInfo, options);
+        var branchRows = AssignBranchLanes(branches, hierarchyInfo, branchCommits);
 
         // Calculate node positions
         sw.Restart();
@@ -109,12 +109,21 @@ public class LogicalLayoutEngine(
         List<DomainBranch> branches;
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
-            branches = (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken)).ToList();
+            branches = [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken))];
         }
         else
         {
             var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            branches = (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken)).ToList();
+            // Expand patterns that don't already include the "origin/" prefix so users can
+            // type "main" or "cesarzc/*" instead of "origin/main" / "origin/cesarzc/*".
+            // LibGit2Sharp FriendlyName for remotes is always "origin/<name>".
+            var expandedPatterns = patterns
+                .SelectMany(p => p.StartsWith("origin/", StringComparison.OrdinalIgnoreCase)
+                    ? (IEnumerable<string>)[p]
+                    : [p, "origin/" + p])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            branches = [.. (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, expandedPatterns, cancellationToken))];
         }
 
         // Filter to origin/* branches only to avoid duplicate processing
@@ -284,7 +293,7 @@ public class LogicalLayoutEngine(
         }
     }
 
-    private IProgress<(int processed, int total, string currentBranch)> CreateBatchProgress(
+    private Progress<(int processed, int total, string currentBranch)> CreateBatchProgress(
         Dictionary<string, BranchHierarchyInfo> hierarchyDict,
         IProgress<LayoutProgress>? progress)
     {
@@ -310,7 +319,7 @@ public class LogicalLayoutEngine(
     private static Dictionary<string, int> AssignBranchLanes(
         List<DomainBranch> branches,
         IReadOnlyList<BranchHierarchyInfo> hierarchyInfo,
-        LayoutOptions options)
+        Dictionary<string, List<DomainCommit>> branchCommits)
     {
         var hierarchyMap = hierarchyInfo.ToDictionary(h => h.Name);
 
@@ -322,14 +331,22 @@ public class LogicalLayoutEngine(
                 ? h.SplitTimestamp.Value
                 : DateTimeOffset.MaxValue;
 
+        static DateTimeOffset GetFirstCommitTs(DomainBranch b, Dictionary<string, List<DomainCommit>> commits) =>
+            commits.TryGetValue(b.Name, out var list) && list.Count > 0
+                ? list.Min(c => c.Timestamp)
+                : DateTimeOffset.MaxValue;
+
         var sorted = branches.ToList();
         sorted.Sort((a, b) =>
         {
             var tierCmp = GetTier(a, hierarchyMap).CompareTo(GetTier(b, hierarchyMap));
             if (tierCmp != 0) return tierCmp;
 
-            var tsCmp = GetSplitTs(a, hierarchyMap).CompareTo(GetSplitTs(b, hierarchyMap));
-            if (tsCmp != 0) return tsCmp;
+            var splitCmp = GetSplitTs(a, hierarchyMap).CompareTo(GetSplitTs(b, hierarchyMap));
+            if (splitCmp != 0) return splitCmp;
+
+            var firstCmp = GetFirstCommitTs(a, branchCommits).CompareTo(GetFirstCommitTs(b, branchCommits));
+            if (firstCmp != 0) return firstCmp;
 
             return string.Compare(a.Name, b.Name, StringComparison.Ordinal);
         });
@@ -405,6 +422,11 @@ public class LogicalLayoutEngine(
                 Timestamp = commit.Timestamp,
                 Message = commit.Message,
                 Author = commit.Author,
+                AuthorEmail = commit.AuthorEmail,
+                Committer = commit.Committer,
+                CommitterEmail = commit.CommitterEmail,
+                CommitterTimestamp = commit.CommitterTimestamp,
+                ParentShas = commit.ParentShas,
                 IsSignificant = isSignificant,
                 GridRow = gridRow,
                 GridColumn = gridColumn

@@ -113,6 +113,9 @@ public class LogicalLayoutEngineTests
             Sha = "abc123",
             Author = "Test Author",
             AuthorEmail = "test@example.com",
+            Committer = "Test Author",
+            CommitterEmail = "test@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Initial commit",
             ParentShas = []
@@ -163,6 +166,9 @@ public class LogicalLayoutEngineTests
             Sha = "abc123",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Message = "First commit",
             ParentShas = []
@@ -173,6 +179,9 @@ public class LogicalLayoutEngineTests
             Sha = "def456",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Second commit",
             ParentShas = ["abc123"]
@@ -220,6 +229,9 @@ public class LogicalLayoutEngineTests
             Sha = "merge123",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Merge branch 'feature'",
             ParentShas = ["abc123", "def456"] // Two parents = merge
@@ -270,6 +282,9 @@ public class LogicalLayoutEngineTests
             Sha = "commit1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Main commit",
             ParentShas = []
@@ -280,6 +295,9 @@ public class LogicalLayoutEngineTests
             Sha = "commit2",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Dev commit",
             ParentShas = []
@@ -340,8 +358,8 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsBatchAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>());
+            .Setup(x => x.GetCommitsBatchAsync(It.IsAny<string>(), It.IsAny<List<(string, string?)>>(), It.IsAny<Progress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -381,6 +399,9 @@ public class LogicalLayoutEngineTests
             Sha = "commit1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Test commit",
             ParentShas = []
@@ -471,6 +492,9 @@ public class LogicalLayoutEngineTests
             Sha = "main1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Message = "Main commit",
             ParentShas = []
@@ -481,6 +505,9 @@ public class LogicalLayoutEngineTests
             Sha = "feature1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Message = "Feature commit",
             ParentShas = ["main1"] // Feature branches from main
@@ -542,6 +569,9 @@ public class LogicalLayoutEngineTests
             Sha = "base1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-3),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-3),
             Message = "Base commit",
             ParentShas = []
@@ -552,6 +582,9 @@ public class LogicalLayoutEngineTests
             Sha = "feature1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Message = "Feature work",
             ParentShas = ["base1"]
@@ -562,6 +595,9 @@ public class LogicalLayoutEngineTests
             Sha = "merge1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Message = "Merge feature into main",
             ParentShas = ["base1", "feature1"] // Two parents = merge (IsMerge computed from this)
@@ -610,9 +646,9 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
         var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
         var t0 = DateTimeOffset.UtcNow;
-        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0, Message = "1", ParentShas = [] };
-        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
-        var commit3 = new Commit { Sha = "c3", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] };
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+        var commit3 = new Commit { Sha = "c3", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(2), Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
@@ -636,9 +672,9 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
         var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
         var sameTime = DateTimeOffset.UtcNow;
-        var commit1 = new Commit { Sha = "aaa", Author = "A", AuthorEmail = "a@b", Timestamp = sameTime, Message = "1", ParentShas = [] };
-        var commit2 = new Commit { Sha = "bbb", Author = "A", AuthorEmail = "a@b", Timestamp = sameTime, Message = "2", ParentShas = [] };
-        var commit3 = new Commit { Sha = "ccc", Author = "A", AuthorEmail = "a@b", Timestamp = sameTime, Message = "3", ParentShas = [] };
+        var commit1 = new Commit { Sha = "aaa", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = sameTime, Timestamp = sameTime, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "bbb", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = sameTime, Timestamp = sameTime, Message = "2", ParentShas = [] };
+        var commit3 = new Commit { Sha = "ccc", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = sameTime, Timestamp = sameTime, Message = "3", ParentShas = [] };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
@@ -662,8 +698,8 @@ public class LogicalLayoutEngineTests
         var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
         var devBranch = new Branch { Name = "origin/develop", FullName = "refs/remotes/origin/develop", TipSha = "d1", IsRemote = true };
         var t0 = DateTimeOffset.UtcNow;
-        var mainCommit = new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Timestamp = t0, Message = "main", ParentShas = [] };
-        var devCommit = new Commit { Sha = "d1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "dev", ParentShas = [] };
+        var mainCommit = new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] };
+        var devCommit = new Commit { Sha = "d1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "dev", ParentShas = [] };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([mainBranch, devBranch]);
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
@@ -692,9 +728,9 @@ public class LogicalLayoutEngineTests
         var t0 = DateTimeOffset.UtcNow;
         var commits = new List<Commit>
         {
-            new() { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "1", ParentShas = [] },
-            new() { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] },
-            new() { Sha = "c3", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] }
+            new() { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] },
+            new() { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] },
+            new() { Sha = "c3", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(2), Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] }
         };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
@@ -717,8 +753,8 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions { MarginX = 50, ColumnWidth = 25.0 };
         var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c2", IsRemote = true };
         var t0 = DateTimeOffset.UtcNow;
-        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "1", ParentShas = [] };
-        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
@@ -745,7 +781,7 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
         var t0 = DateTimeOffset.UtcNow;
 
-        var mainBranch    = new Branch { Name = "origin/main",        FullName = "refs/remotes/origin/main",        TipSha = "m1", IsRemote = true };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
         var featureBranch = new Branch { Name = "origin/feature/aaa", FullName = "refs/remotes/origin/feature/aaa", TipSha = "f1", IsRemote = true };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
@@ -754,8 +790,8 @@ public class LogicalLayoutEngineTests
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
             {
-                ["origin/main"]        = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "main", ParentShas = [] }],
-                ["origin/feature/aaa"] = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "feat", ParentShas = [] }]
+                ["origin/main"] = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] }],
+                ["origin/feature/aaa"] = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "feat", ParentShas = [] }]
             });
 
         _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
@@ -769,10 +805,10 @@ public class LogicalLayoutEngineTests
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
         // Assert
-        var mainNode    = result.Nodes.First(n => n.BranchName == "origin/main");
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
         var featureNode = result.Nodes.First(n => n.BranchName == "origin/feature/aaa");
 
-        Assert.AreEqual(0, mainNode.GridRow,    "origin/main must always be row 0 regardless of alphabetical order");
+        Assert.AreEqual(0, mainNode.GridRow, "origin/main must always be row 0 regardless of alphabetical order");
         Assert.AreEqual(1, featureNode.GridRow, "feature branch should be row 1");
     }
 
@@ -784,9 +820,9 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
         var t0 = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        var mainBranch    = new Branch { Name = "origin/main",        FullName = "refs/remotes/origin/main",        TipSha = "m1", IsRemote = true };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
         var releaseBranch = new Branch { Name = "origin/release/1.0", FullName = "refs/remotes/origin/release/1.0", TipSha = "r1", IsRemote = true };
-        var featureBranch = new Branch { Name = "origin/feature/x",   FullName = "refs/remotes/origin/feature/x",   TipSha = "f1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature/x", FullName = "refs/remotes/origin/feature/x", TipSha = "f1", IsRemote = true };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
             .ReturnsAsync([mainBranch, releaseBranch, featureBranch]);
@@ -794,9 +830,9 @@ public class LogicalLayoutEngineTests
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
             {
-                ["origin/main"]        = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,            Message = "main",    ParentShas = [] }],
-                ["origin/release/1.0"] = [new Commit { Sha = "r1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddMonths(1), Message = "release", ParentShas = [] }],
-                ["origin/feature/x"]   = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddMonths(2), Message = "feat",    ParentShas = [] }]
+                ["origin/main"] = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] }],
+                ["origin/release/1.0"] = [new Commit { Sha = "r1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddMonths(1), Timestamp = t0.AddMonths(1), Message = "release", ParentShas = [] }],
+                ["origin/feature/x"] = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddMonths(2), Timestamp = t0.AddMonths(2), Message = "feat", ParentShas = [] }]
             });
 
         _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
@@ -811,11 +847,11 @@ public class LogicalLayoutEngineTests
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
         // Assert
-        var mainNode    = result.Nodes.First(n => n.BranchName == "origin/main");
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
         var releaseNode = result.Nodes.First(n => n.BranchName == "origin/release/1.0");
         var featureNode = result.Nodes.First(n => n.BranchName == "origin/feature/x");
 
-        Assert.AreEqual(0, mainNode.GridRow,    "main should be row 0");
+        Assert.AreEqual(0, mainNode.GridRow, "main should be row 0");
         Assert.AreEqual(1, releaseNode.GridRow, "release (earlier split) should be row 1");
         Assert.AreEqual(2, featureNode.GridRow, "feature (later split) should be row 2");
     }
@@ -828,7 +864,7 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
         var t0 = DateTimeOffset.UtcNow;
 
-        var mainBranch     = new Branch { Name = "origin/main",        FullName = "refs/remotes/origin/main",        TipSha = "m1",  IsRemote = true };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
         var featureABranch = new Branch { Name = "origin/feature/aaa", FullName = "refs/remotes/origin/feature/aaa", TipSha = "fa1", IsRemote = true };
         var featureBBranch = new Branch { Name = "origin/feature/bbb", FullName = "refs/remotes/origin/feature/bbb", TipSha = "fb1", IsRemote = true };
 
@@ -838,9 +874,9 @@ public class LogicalLayoutEngineTests
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
             {
-                ["origin/main"]        = [new Commit { Sha = "m1",  Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "main", ParentShas = [] }],
-                ["origin/feature/aaa"] = [new Commit { Sha = "fa1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "fa",   ParentShas = [] }],
-                ["origin/feature/bbb"] = [new Commit { Sha = "fb1", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(2), Message = "fb",   ParentShas = [] }]
+                ["origin/main"] = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] }],
+                ["origin/feature/aaa"] = [new Commit { Sha = "fa1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "fa", ParentShas = [] }],
+                ["origin/feature/bbb"] = [new Commit { Sha = "fb1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(2), Timestamp = t0.AddHours(2), Message = "fb", ParentShas = [] }]
             });
 
         _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
@@ -855,11 +891,11 @@ public class LogicalLayoutEngineTests
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
         // Assert
-        var mainNode     = result.Nodes.First(n => n.BranchName == "origin/main");
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
         var featureANode = result.Nodes.First(n => n.BranchName == "origin/feature/aaa");
         var featureBNode = result.Nodes.First(n => n.BranchName == "origin/feature/bbb");
 
-        Assert.AreEqual(0, mainNode.GridRow,     "main should be row 0");
+        Assert.AreEqual(0, mainNode.GridRow, "main should be row 0");
         Assert.AreEqual(1, featureANode.GridRow, "feature/aaa should be row 1 (alphabetically before bbb)");
         Assert.AreEqual(2, featureBNode.GridRow, "feature/bbb should be row 2");
     }
@@ -874,18 +910,32 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions { MarginX = 100, ColumnWidth = 20.0, MarginY = 60, BranchSpacing = 40 };
         var t0 = DateTimeOffset.UtcNow;
 
-        var mainBranch    = new Branch { Name = "origin/main",    FullName = "refs/remotes/origin/main",    TipSha = "m1", IsRemote = true };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
         var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1", IsRemote = true };
 
         var mainCommit = new Commit
         {
-            Sha = "m1", Author = "A", AuthorEmail = "a@b",
-            Timestamp = t0, Message = "main", ParentShas = []
+            Sha = "m1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0,
+            Timestamp = t0,
+            Message = "main",
+            ParentShas = []
         };
         var featureCommit = new Commit
         {
-            Sha = "f1", Author = "A", AuthorEmail = "a@b",
-            Timestamp = t0.AddHours(1), Message = "feature", ParentShas = ["m1"]
+            Sha = "f1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0.AddHours(1),
+            Timestamp = t0.AddHours(1),
+            Message = "feature",
+            ParentShas = ["m1"]
         };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
@@ -893,7 +943,7 @@ public class LogicalLayoutEngineTests
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
             {
-                ["origin/main"]    = [mainCommit],
+                ["origin/main"] = [mainCommit],
                 ["origin/feature"] = [mainCommit, featureCommit]
             });
         _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
@@ -932,23 +982,44 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions { MarginX = 100, ColumnWidth = 20.0, MarginY = 60, BranchSpacing = 40 };
         var t0 = DateTimeOffset.UtcNow;
 
-        var mainBranch    = new Branch { Name = "origin/main",    FullName = "refs/remotes/origin/main",    TipSha = "merge1", IsRemote = true };
-        var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1",     IsRemote = true };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "merge1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1", IsRemote = true };
 
         var baseCommit = new Commit
         {
-            Sha = "base1", Author = "A", AuthorEmail = "a@b",
-            Timestamp = t0, Message = "base", ParentShas = []
+            Sha = "base1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0,
+            Timestamp = t0,
+            Message = "base",
+            ParentShas = []
         };
         var featureCommit = new Commit
         {
-            Sha = "f1", Author = "A", AuthorEmail = "a@b",
-            Timestamp = t0.AddHours(1), Message = "feature", ParentShas = ["base1"]
+            Sha = "f1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0.AddHours(1),
+            Timestamp = t0.AddHours(1),
+            Message = "feature",
+            ParentShas = ["base1"]
         };
         var mergeCommit = new Commit
         {
-            Sha = "merge1", Author = "A", AuthorEmail = "a@b",
-            Timestamp = t0.AddHours(2), Message = "merge", ParentShas = ["base1", "f1"]
+            Sha = "merge1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0.AddHours(2),
+            Timestamp = t0.AddHours(2),
+            Message = "merge",
+            ParentShas = ["base1", "f1"]
         };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
@@ -956,7 +1027,7 @@ public class LogicalLayoutEngineTests
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
             {
-                ["origin/main"]    = [baseCommit, mergeCommit],
+                ["origin/main"] = [baseCommit, mergeCommit],
                 ["origin/feature"] = [baseCommit, featureCommit]
             });
         _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
@@ -988,8 +1059,8 @@ public class LogicalLayoutEngineTests
         var options = new LayoutOptions();
         var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c2", IsRemote = true };
         var t0 = DateTimeOffset.UtcNow;
-        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Timestamp = t0,             Message = "1", ParentShas = [] };
-        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
 
         _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
         _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))

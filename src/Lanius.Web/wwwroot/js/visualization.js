@@ -967,16 +967,18 @@ const Visualization = (() => {
     }
 
     function showNodeDetail(node) {
-        // Show commit detail popup
         if (window.LaniusApp && window.LaniusApp.showCommitDetail) {
-            // Map node data to commit structure
             const commit = {
                 sha: node.commitId,
                 author: node.author || 'Unknown',
-                authorEmail: '',
+                authorEmail: node.authorEmail || '',
                 timestamp: node.timestamp,
-                message: node.message || 'No message',
+                committer: node.committer || '',
+                committerEmail: node.committerEmail || '',
+                committerTimestamp: node.committerTimestamp || node.timestamp,
+                message: node.message || '',
                 branches: [node.branchName],
+                parentShas: node.parentShas || [],
                 stats: null
             };
             window.LaniusApp.showCommitDetail(commit);

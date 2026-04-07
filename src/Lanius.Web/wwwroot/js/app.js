@@ -674,14 +674,29 @@ function handleCommitRevealed(data) {
     const el = document.getElementById('stat-commits');
     el.textContent = String(parseInt(el.textContent) + 1);
 
-    // Update "Now Playing" panel
     const node = state.layoutData?.nodes?.find(n => n.commitId === data.sha);
     if (node) {
-        document.getElementById('np-message').textContent = node.message || '(no message)';
-        document.getElementById('np-author').textContent  = node.author  || 'Unknown';
-        document.getElementById('np-date').textContent    = new Date(node.timestamp).toLocaleString();
-        document.getElementById('np-branch').textContent  = node.branchName || '';
-        document.getElementById('np-sha').textContent     = data.sha.substring(0, 8);
+        const message = node.message || '';
+        document.getElementById('np-message').textContent = message;
+        document.getElementById('np-sha').textContent    = data.sha.substring(0, 8);
+        document.getElementById('np-branch').textContent = node.branchName || '';
+        document.getElementById('np-author').textContent = node.authorEmail
+            ? `${node.author} <${node.authorEmail}>`
+            : node.author || 'Unknown';
+        document.getElementById('np-author-date').textContent    = formatIsoDate(node.timestamp);
+        document.getElementById('np-committer').textContent      = node.committerEmail
+            ? `${node.committer} <${node.committerEmail}>`
+            : node.committer || '';
+        document.getElementById('np-committer-date').textContent = formatIsoDate(node.committerTimestamp);
+
+        const parentsRow = document.getElementById('np-parents-row');
+        if (node.parentShas && node.parentShas.length > 0) {
+            document.getElementById('np-parents').textContent = node.parentShas.map(s => s.substring(0, 8)).join(', ');
+            parentsRow.style.display = '';
+        } else {
+            parentsRow.style.display = 'none';
+        }
+
         document.getElementById('replay-now-playing').classList.remove('hidden');
     }
 
@@ -842,12 +857,36 @@ function setReplayButtonState(isPlaying) {
     document.getElementById('replay-stop').disabled = !isPlaying;
 }
 
+function formatIsoDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d)) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 function showCommitDetail(commit) {
     document.getElementById('detail-sha').textContent = commit.sha.substring(0, 8);
-    document.getElementById('detail-author').textContent = `${commit.author} <${commit.authorEmail}>`;
-    document.getElementById('detail-date').textContent = new Date(commit.timestamp).toLocaleString();
-    document.getElementById('detail-branches').textContent = commit.branches.join(', ');
-    document.getElementById('detail-message').textContent = commit.message;
+    document.getElementById('detail-author').textContent = commit.authorEmail
+        ? `${commit.author} <${commit.authorEmail}>`
+        : commit.author || 'Unknown';
+    document.getElementById('detail-author-date').textContent = formatIsoDate(commit.timestamp);
+    document.getElementById('detail-committer').textContent = commit.committerEmail
+        ? `${commit.committer} <${commit.committerEmail}>`
+        : commit.committer || '';
+    document.getElementById('detail-committer-date').textContent = formatIsoDate(commit.committerTimestamp);
+    document.getElementById('detail-branches').textContent = (commit.branches || []).join(', ');
+
+    const parentsRow = document.getElementById('detail-parents-row');
+    if (commit.parentShas && commit.parentShas.length > 0) {
+        document.getElementById('detail-parents').textContent = commit.parentShas.map(s => s.substring(0, 8)).join(', ');
+        parentsRow.style.display = '';
+    } else {
+        parentsRow.style.display = 'none';
+    }
+
+    const message = commit.message || '';
+    document.getElementById('detail-message').textContent = message;
 
     if (commit.stats) {
         document.getElementById('detail-additions').textContent = `+${commit.stats.linesAdded}`;
