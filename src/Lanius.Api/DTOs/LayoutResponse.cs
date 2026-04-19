@@ -174,6 +174,16 @@ public class LayoutNodeDto
     /// Ghost/shadow reference node — synthetic anchor, not rendered as a commit circle.
     /// </summary>
     public bool IsGhost { get; init; }
+
+    /// <summary>
+    /// Number of commits in this calendar group (0 for individual commit nodes).
+    /// </summary>
+    public int CommitCount { get; init; }
+
+    /// <summary>
+    /// Formatted commit listing lines for calendar groups.
+    /// </summary>
+    public List<string> GroupCommitLines { get; init; } = [];
 }
 
 /// <summary>

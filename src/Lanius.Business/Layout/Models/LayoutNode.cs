@@ -89,4 +89,14 @@ public record LayoutNode
     /// Ghost/shadow reference node — synthetic anchor for split edges. Not rendered as a commit circle.
     /// </summary>
     public bool IsGhost { get; init; }
+
+    /// <summary>
+    /// Number of commits in this calendar group (0 for individual commit nodes).
+    /// </summary>
+    public int CommitCount { get; init; }
+
+    /// <summary>
+    /// Formatted commit listing lines for calendar groups ("sha8  date  title").
+    /// </summary>
+    public List<string> GroupCommitLines { get; init; } = [];
 }

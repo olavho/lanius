@@ -874,6 +874,15 @@ function formatIsoDate(ts) {
 }
 
 function showCommitDetail(commit) {
+    // Reset to normal (individual commit) view
+    document.getElementById('detail-sha-label').textContent = 'SHA';
+    document.getElementById('detail-author-row').style.display = '';
+    document.getElementById('detail-author-date-label').textContent = 'Author date';
+    document.getElementById('detail-committer-row').style.display = '';
+    document.getElementById('detail-committer-date-row').style.display = '';
+    document.getElementById('detail-commit-count-row').style.display = 'none';
+    document.getElementById('detail-parents-row').style.display = '';
+
     document.getElementById('detail-sha').textContent = commit.sha.substring(0, 8);
     document.getElementById('detail-author').textContent = commit.authorEmail
         ? `${commit.author} <${commit.authorEmail}>`
@@ -909,9 +918,56 @@ function hideCommitDetail() {
     document.getElementById('commit-detail').classList.add('hidden');
 }
 
+function showCalendarGroupDetail(node) {
+    const gran = (state.layoutData?.calendarGranularity || 'month').toLowerCase();
+
+    document.getElementById('detail-sha-label').textContent = 'Group';
+    document.getElementById('detail-author-row').style.display = 'none';
+    document.getElementById('detail-committer-row').style.display = 'none';
+    document.getElementById('detail-committer-date-row').style.display = 'none';
+    document.getElementById('detail-parents-row').style.display = 'none';
+    document.getElementById('detail-commit-count-row').style.display = '';
+
+    // Group ID (period key)
+    document.getElementById('detail-sha').textContent = node.commitId || '';
+
+    // Date label and value
+    const dateLabel = gran === 'day' ? 'Date' :
+                      gran === 'week' ? 'Week start' :
+                      gran === 'year' ? 'Year' : 'Month';
+    document.getElementById('detail-author-date-label').textContent = dateLabel;
+    const ts = new Date(node.timestamp);
+    let dateValue;
+    if (gran === 'day') {
+        dateValue = ts.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } else if (gran === 'week') {
+        dateValue = ts.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } else if (gran === 'year') {
+        dateValue = String(ts.getFullYear());
+    } else {
+        dateValue = ts.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    }
+    document.getElementById('detail-author-date').textContent = dateValue;
+
+    document.getElementById('detail-branches').textContent = 'all';
+    document.getElementById('detail-commit-count').textContent = node.commitCount || (node.groupCommitLines || []).length || '';
+
+    // Commit listing in textarea
+    const lines = node.groupCommitLines || [];
+    document.getElementById('detail-message').textContent = lines.join('\n');
+
+    // Hide diff stats
+    document.getElementById('detail-additions').textContent = '';
+    document.getElementById('detail-deletions').textContent = '';
+    document.getElementById('detail-files').textContent = '';
+
+    document.getElementById('commit-detail').classList.remove('hidden');
+}
+
 // Export for visualization module
 window.LaniusApp = {
     state,
     showCommitDetail,
+    showCalendarGroupDetail,
     updateStats
 };

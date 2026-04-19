@@ -1126,18 +1126,8 @@ const Visualization = (() => {
     }
 
     function showCalendarNodeDetail(node) {
-        // Show period detail
-        if (window.LaniusApp && window.LaniusApp.showCommitDetail) {
-            const commit = {
-                sha: node.commitId || 'calendar-group',
-                author: 'Calendar Group',
-                authorEmail: '',
-                timestamp: node.timestamp,
-                message: node.message || 'Time period group',
-                branches: [node.branchName || 'All branches'],
-                stats: null
-            };
-            window.LaniusApp.showCommitDetail(commit);
+        if (window.LaniusApp && window.LaniusApp.showCalendarGroupDetail) {
+            window.LaniusApp.showCalendarGroupDetail(node);
         }
     }
 

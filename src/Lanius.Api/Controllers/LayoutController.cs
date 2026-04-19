@@ -103,7 +103,9 @@ public class LayoutController(
                     IsSignificant = n.IsSignificant,
                     GridRow = n.GridRow,
                     GridColumn = n.GridColumn,
-                    IsGhost = n.IsGhost
+                    IsGhost = n.IsGhost,
+                    CommitCount = n.CommitCount,
+                    GroupCommitLines = [.. n.GroupCommitLines]
                 })],
                 Edges = [.. result.Edges.Select(e => new LayoutEdgeDto
                 {

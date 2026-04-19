@@ -116,7 +116,8 @@ public class CalendarLayoutEngine(
         }
 
         // Calculate node positions
-        var nodes = CalculateNodePositions(groups, effectiveCanvasWidth, granularity, columnWidthPx);
+        var commitLookup = allCommits.ToDictionary(c => c.Sha, c => c);
+        var nodes = CalculateNodePositions(groups, effectiveCanvasWidth, granularity, columnWidthPx, commitLookup);
 
         progress?.Report(new LayoutProgress(100, "Layout complete", groups.Count, groups.Count));
 
@@ -283,7 +284,8 @@ public class CalendarLayoutEngine(
         List<PeriodGroup> groups,
         int canvasWidth,
         CalendarGranularity granularity = CalendarGranularity.Month,
-        double? fixedColumnWidthPx = null)
+        double? fixedColumnWidthPx = null,
+        Dictionary<string, Commit>? commitLookup = null)
     {
         if (groups.Count == 0) return [];
 
@@ -334,13 +336,15 @@ public class CalendarLayoutEngine(
         {
             CommitId = FormatPeriodId(group, granularity),
             X = NodeX(index, group),
-            Y = CenterY, // Single horizontal row (Phase 4a)
+            Y = CenterY,
             Radius = CalculateNodeRadius(group.CommitCount, maxCommits),
-            BranchName = "all", // All branches aggregated
+            BranchName = "all",
             Timestamp = group.PeriodStart,
             Message = FormatPeriodLabel(group, granularity),
-            Author = string.Empty, // Not applicable for period groups
-            IsSignificant = group.CommitCount > maxCommits * 0.7 // Top 30% activity
+            Author = string.Empty,
+            IsSignificant = group.CommitCount > maxCommits * 0.7,
+            CommitCount = group.CommitCount,
+            GroupCommitLines = BuildGroupCommitLines(group, commitLookup)
         }).ToList();
 
         return nodes;
@@ -383,5 +387,21 @@ public class CalendarLayoutEngine(
             CalendarGranularity.Year => $"{group.PeriodStart.Year}: {count} commit{suffix}",
             _ => $"{group.PeriodStart:MMMM yyyy}: {count} commit{suffix}"
         };
+    }
+
+    private static List<string> BuildGroupCommitLines(PeriodGroup group, Dictionary<string, Commit>? lookup)
+    {
+        if (lookup is null || group.CommitIds.Count == 0) return [];
+        return group.CommitIds
+            .Where(sha => lookup.ContainsKey(sha))
+            .Select(sha =>
+            {
+                var c = lookup[sha];
+                var shortSha = sha.Length >= 8 ? sha[..8] : sha;
+                var date = c.Timestamp.ToString("yyyy-MM-dd");
+                var title = c.ShortMessage.Length > 72 ? c.ShortMessage[..72] + "…" : c.ShortMessage;
+                return $"{shortSha}  {date}  {title}";
+            })
+            .ToList();
     }
 }
