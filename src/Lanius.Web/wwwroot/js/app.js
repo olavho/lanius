@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     restorePanelStates();
     initPanelToggles();
     initializeEventHandlers();
+    document.getElementById('panel-replay').style.display = state.layoutMode === 'calendar' ? 'none' : '';
     initializeSignalR();
     loadExistingRepositories();
 });
@@ -122,8 +123,10 @@ function initializeEventHandlers() {
         state.layoutMode = e.target.value;
         const granularityGroup = document.getElementById('granularity-group');
         const infoText = document.getElementById('layout-mode-info');
+        const replayPanel = document.getElementById('panel-replay');
 
         granularityGroup.classList.toggle('is-visible', state.layoutMode === 'calendar');
+        replayPanel.style.display = state.layoutMode === 'calendar' ? 'none' : '';
         if (state.layoutMode === 'calendar') {
             infoText.innerHTML = '<small>Groups commits by time periods</small>';
         } else if (state.layoutMode === 'timeline') {

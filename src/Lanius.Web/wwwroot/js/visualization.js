@@ -942,6 +942,85 @@ const Visualization = (() => {
                     cursor.setDate(cursor.getDate() + 7);
                 }
 
+            } else if (gran === 'day') {
+                // --- DAY axis  (3 tiers: year → month → day-of-month) ---
+                const MS_PER_DAY = 24 * 3600 * 1000;
+                function dateToDayGX(date) {
+                    return marginX + ((date - minTs) / MS_PER_DAY) * colW;
+                }
+                function dateToDaySvgX(date) {
+                    return currentZoom.applyX(dateToDayGX(date));
+                }
+
+                const colWidthSvgPx = colW * currentZoom.k;
+                const firstYear = minTs.getFullYear();
+                const lastYear  = maxTs.getFullYear();
+
+                // Tier 1 — Year labels (y=14) + heavy year lines
+                let lastYearLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear + 1; y++) {
+                    const svgX = dateToDaySvgX(new Date(y, 0, 1));
+                    if (svgX < -50 || svgX > svgW + 50) continue;
+                    axisG.append('line')
+                        .attr('class', 'timeline-grid-line--year')
+                        .attr('x1', svgX).attr('y1', 0)
+                        .attr('x2', svgX).attr('y2', svgH);
+                    if (svgX - lastYearLabelX >= 40) {
+                        axisG.append('text')
+                            .attr('class', 'timeline-label--year')
+                            .attr('x', svgX + 3).attr('y', 14)
+                            .text(y);
+                        lastYearLabelX = svgX;
+                    }
+                }
+
+                // Tier 2 — Month labels (y=30) + lighter month lines
+                let lastMonthLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear; y++) {
+                    for (let m = 0; m < 12; m++) {
+                        const monthStart = new Date(y, m, 1);
+                        const svgX = dateToDaySvgX(monthStart);
+                        if (svgX < -50 || svgX > svgW + 50) continue;
+                        if (m > 0) {
+                            axisG.append('line')
+                                .attr('class', 'timeline-grid-line--month')
+                                .attr('x1', svgX).attr('y1', 0)
+                                .attr('x2', svgX).attr('y2', svgH);
+                        }
+                        if (svgX - lastMonthLabelX >= 24) {
+                            axisG.append('text')
+                                .attr('class', 'timeline-label--month')
+                                .attr('x', svgX + 3).attr('y', 30)
+                                .text(monthStart.toLocaleDateString('en-US', { month: 'short' }));
+                            lastMonthLabelX = svgX;
+                        }
+                    }
+                }
+
+                // Tier 3 — Day-of-month labels (y=46) for every calendar day in range
+                const fmtFull = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                let lastDayLabelX = -Infinity;
+                const cursor = new Date(minTs.getFullYear(), minTs.getMonth(), minTs.getDate());
+                const endDate = new Date(maxTs.getFullYear(), maxTs.getMonth(), maxTs.getDate());
+                while (cursor <= endDate) {
+                    const svgX = dateToDaySvgX(cursor);
+                    if (svgX >= -50 && svgX <= svgW + 50) {
+                        const day = cursor.getDate();
+                        const labelX = svgX + colWidthSvgPx / 2;
+                        if (colWidthSvgPx >= 8 && labelX - lastDayLabelX >= colWidthSvgPx * 0.85) {
+                            const t = axisG.append('text')
+                                .attr('class', 'timeline-label--week') // reuse same style as week numbers
+                                .attr('x', labelX)
+                                .attr('y', 46)
+                                .attr('text-anchor', 'middle')
+                                .text(day);
+                            t.append('title').text(fmtFull(cursor));
+                            lastDayLabelX = labelX;
+                        }
+                    }
+                    cursor.setDate(cursor.getDate() + 1);
+                }
+
             } else {
                 // --- MONTH axis (existing logic) ---
                 const firstYear   = minTs.getFullYear();

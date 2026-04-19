@@ -104,6 +104,8 @@ public class CalendarLayoutEngine(
                     + (lastPeriodTs.Month - firstPeriodTs.Month) + 1,
                 CalendarGranularity.Week =>
                     (int)Math.Round((lastPeriodTs - firstPeriodTs).TotalDays / 7) + 1,
+                CalendarGranularity.Day =>
+                    (int)Math.Round((lastPeriodTs - firstPeriodTs).TotalDays) + 1,
                 _ => groups.Count
             };
             effectiveCanvasWidth = (int)(2 * marginX + totalColumns * columnWidthPx.Value);
@@ -302,6 +304,9 @@ public class CalendarLayoutEngine(
         int CalendarWeekIndex(DateTimeOffset weekStart) =>
             (int)Math.Round((weekStart - firstPeriod).TotalDays / 7);
 
+        int CalendarDayIndex(DateTimeOffset ts) =>
+            (int)Math.Round((ts - firstPeriod).TotalDays);
+
         double NodeX(int sequentialIndex, PeriodGroup group)
         {
             if (fixedColumnWidthPx.HasValue)
@@ -310,6 +315,7 @@ public class CalendarLayoutEngine(
                 {
                     CalendarGranularity.Month => CalendarMonthIndex(group.PeriodStart),
                     CalendarGranularity.Week  => CalendarWeekIndex(group.PeriodStart),
+                    CalendarGranularity.Day   => CalendarDayIndex(group.PeriodStart),
                     _                         => sequentialIndex
                 };
                 return marginX + colIndex * fixedColumnWidthPx.Value + fixedColumnWidthPx.Value / 2.0;
