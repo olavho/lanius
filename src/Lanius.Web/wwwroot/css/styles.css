@@ -768,56 +768,63 @@ body {
 
 /* Timeline grid lines */
 .timeline-grid-line--year {
-    stroke: var(--line-color-subtle);
+    stroke: var(--fg-muted);
     stroke-width: 1;
-    opacity: 0.4;
+    opacity: 0.8;
 }
 
 .timeline-grid-line--month {
-    stroke: var(--bg-tertiary);
+    stroke: var(--fg-muted);
     stroke-width: 1;
-    opacity: 0.15;
+    opacity: 0.2;
 }
 
 .timeline-grid-line--week {
-    stroke: var(--bg-tertiary);
+    stroke: var(--fg-muted);
     stroke-width: 1;
-    opacity: 0.08;
+    opacity: 0.1;
 }
 
 .timeline-grid-line--day {
-    stroke: var(--bg-tertiary);
+    stroke: var(--fg-muted);
     stroke-width: 1;
-    opacity: 0.05;
+    opacity: 0.0;
 }
 
 /* Timeline axis labels */
 .timeline-label--year {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 20px;
     font-weight: bold;
     fill: var(--fg-primary);
 }
 
 .timeline-label--month {
     font-family: var(--font-mono);
-    font-size: 8px;
-    fill: var(--fg-muted);
-    opacity: 0.5;
+    font-size: 16px;
+    font-weight: 500;
+    fill: var(--fg-primary);
 }
 
 .timeline-label--week {
     font-family: var(--font-mono);
-    font-size: 7px;
-    fill: var(--fg-muted);
-    opacity: 0.4;
+    font-size: 12px;
+    fill: var(--fg-secondary);
+    opacity: 0.7;
 }
 
 .timeline-label--day {
     font-family: var(--font-mono);
-    font-size: 7px;
+    font-size: 8px;
     fill: var(--fg-muted);
-    opacity: 0.3;
+    opacity: 0;
+}
+
+/* Separator between axis band and graph area */
+.timeline-axis-baseline {
+    stroke: var(--line-color-subtle);
+    stroke-width: 1;
+    opacity: 0.4;
 }
 
 /* Tooltip */

@@ -122,6 +122,8 @@ public class LayoutController(
                 Height = result.Height,
                 MinTimestamp = result.MinTimestamp,
                 MaxTimestamp = result.MaxTimestamp,
+                TimelineOriginX = result.TimelineOriginX,
+                TimelinePixelsPerSecond = result.TimelinePixelsPerSecond,
                 TotalCommits = result.TotalCommits,
                 TotalBranches = result.TotalBranches,
                 RowCount = result.RowCount,

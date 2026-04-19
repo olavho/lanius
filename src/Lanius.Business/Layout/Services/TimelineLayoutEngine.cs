@@ -88,6 +88,8 @@ public class TimelineLayoutEngine(
             Height = Math.Max(maxY, options.CanvasHeight),
             MinTimestamp = tMin,
             MaxTimestamp = tMax,
+            TimelineOriginX = options.MarginX,
+            TimelinePixelsPerSecond = span.TotalSeconds > 0 ? usableWidth / span.TotalSeconds : 0,
             TotalCommits = allCommits.Count,
             TotalBranches = branches.Count,
             RowCount = branchRows.Count,

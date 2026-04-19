@@ -41,6 +41,17 @@ public record LayoutResult
     public DateTimeOffset? MaxTimestamp { get; init; }
 
     /// <summary>
+    /// X-pixel position corresponding to MinTimestamp (Timeline mode only).
+    /// Allows the frontend to reconstruct the exact same time→x mapping used by the engine.
+    /// </summary>
+    public double? TimelineOriginX { get; init; }
+
+    /// <summary>
+    /// Pixels per second along the time axis (Timeline mode only).
+    /// </summary>
+    public double? TimelinePixelsPerSecond { get; init; }
+
+    /// <summary>
     /// Total number of commits included in layout.
     /// </summary>
     public int TotalCommits { get; init; }

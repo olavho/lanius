@@ -43,6 +43,16 @@ public class LayoutResponse
     public DateTimeOffset? MaxTimestamp { get; init; }
 
     /// <summary>
+    /// X-pixel (in node/g-space) where tMin lands. Timeline mode only.
+    /// </summary>
+    public double? TimelineOriginX { get; init; }
+
+    /// <summary>
+    /// Pixels per second along the time axis. Timeline mode only.
+    /// </summary>
+    public double? TimelinePixelsPerSecond { get; init; }
+
+    /// <summary>
     /// Total number of commits included in the layout.
     /// </summary>
     public int TotalCommits { get; init; }

@@ -621,13 +621,31 @@ const Visualization = (() => {
             const svgH = Math.max(layout.height, container.clientHeight);
             svg.attr('width', svgW).attr('height', svgH);
 
-            // Configure axis scale from layout time range
+            // Configure axis scale from layout time range.
+            // For Timeline mode, nodes are positioned in g-space with their own MarginX offset.
+            // The g-group itself has a translate(config.margin.left, ...) transform.
+            // Derive the pixel range from actual node positions + g-transform so axis ticks
+            // land exactly on the nodes that represent those dates.
             const minTs = layout.minTimestamp ? new Date(layout.minTimestamp) : null;
             const maxTs = layout.maxTimestamp ? new Date(layout.maxTimestamp) : null;
             if (minTs && maxTs && !isNaN(minTs) && !isNaN(maxTs)) {
-                axisScale = d3.scaleTime()
-                    .domain([minTs, maxTs])
-                    .range([config.margin.left, svgW - config.margin.right]);
+                if (layout.mode === 'Timeline' &&
+                    layout.timelineOriginX != null && layout.timelinePixelsPerSecond != null) {
+                    // g.attr('transform', currentZoom) at identity zoom = translate(0,0),
+                    // so nodes render at raw node.x values in SVG space.
+                    // Backend: node.x = timelineOriginX + (t - tMin).seconds * pps
+                    // Axis range must use the same origin — do NOT add config.margin.left.
+                    const originX = layout.timelineOriginX;
+                    const spanSec = (maxTs - minTs) / 1000;
+                    const totalPx = spanSec * layout.timelinePixelsPerSecond;
+                    axisScale = d3.scaleTime()
+                        .domain([minTs, maxTs])
+                        .range([originX, originX + totalPx]);
+                } else {
+                    axisScale = d3.scaleTime()
+                        .domain([minTs, maxTs])
+                        .range([config.margin.left, svgW - config.margin.right]);
+                }
             }
 
             // Render based on layout mode
@@ -755,9 +773,6 @@ const Visualization = (() => {
         const svgW = parseFloat(svg.attr('width')) || 1200;
         const svgH = parseFloat(svg.attr('height')) || 600;
 
-        // Sync range to current SVG width (handles resize)
-        axisScale.range([config.margin.left, svgW - config.margin.right]);
-
         const k = currentZoom.k;
         const rescaledX = currentZoom.rescaleX(axisScale);
 
@@ -767,11 +782,12 @@ const Visualization = (() => {
 
         // Tier rows stacked top-to-bottom inside config.margin.top (60px) space.
         // labelY = SVG text baseline; grid lines span full SVG height.
+        // Use UTC variants so tick positions match the UTC-based timestamps from the backend.
         const tiers = [
-            { name: 'year',  interval: d3.timeYear,  labelFn: d => d.getFullYear(),                                                    labelY: 50, minK: 0   },
-            { name: 'month', interval: d3.timeMonth, labelFn: d => d.toLocaleDateString('en-US', { month: 'short' }),                  labelY: 37, minK: 0.3 },
-            { name: 'week',  interval: d3.timeWeek,  labelFn: d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), labelY: 25, minK: 1.0 },
-            { name: 'day',   interval: d3.timeDay,   labelFn: d => d.getDate(),                                                        labelY: 14, minK: 3.0 },
+            { name: 'year', interval: d3.utcYear, labelFn: d => d.getUTCFullYear(), labelY: 14, minK: 0 },
+            { name: 'month', interval: d3.utcMonth, labelFn: d => d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }), labelY: 30, minK: 0.3 },
+            { name: 'week', interval: d3.utcWeek, labelFn: d => d.getUTCDate(), labelY: 44, minK: 1.0 },
+            { name: 'day', interval: d3.utcDay, labelFn: d => d.getUTCDate(), labelY: 56, minK: 3.0 },
         ];
 
         tiers.forEach(({ name, interval, labelFn, labelY, minK }) => {
@@ -782,14 +798,23 @@ const Visualization = (() => {
                 interval.ceil(visibleMax)
             );
 
+            // Minimum pixel gap between labels of the same tier to prevent overlap
+            const minGap = name === 'year' ? 60 : name === 'month' ? 36 : 28;
+            let lastLabelX = -Infinity;
+
             ticks.forEach(date => {
                 const x = rescaledX(date);
                 if (x < -50 || x > svgW + 50) return;
 
+                // Draw the grid line first (always)
                 axisG.append('line')
                     .attr('class', `timeline-grid-line--${name}`)
                     .attr('x1', x).attr('y1', 0)
                     .attr('x2', x).attr('y2', svgH);
+
+                // Skip label if it would overlap the previous one
+                if (x - lastLabelX < minGap) return;
+                lastLabelX = x;
 
                 axisG.append('text')
                     .attr('class', `timeline-label--${name}`)
@@ -797,6 +822,12 @@ const Visualization = (() => {
                     .text(labelFn(date));
             });
         });
+
+        // Baseline separator at the bottom of the axis band
+        axisG.append('line')
+            .attr('class', 'timeline-axis-baseline')
+            .attr('x1', 0).attr('y1', config.margin.top - 2)
+            .attr('x2', svgW).attr('y2', config.margin.top - 2);
     }
 
     function renderCalendarAxis() {
@@ -832,7 +863,7 @@ const Visualization = (() => {
             const isNewYear = year !== lastYear;
 
             const tierName = isNewYear ? 'year' : 'month';
-            const labelY   = isNewYear ? 50 : 37;
+            const labelY = isNewYear ? 50 : 37;
 
             axisG.append('line')
                 .attr('class', `timeline-grid-line--${tierName}`)
@@ -1068,9 +1099,9 @@ const Visualization = (() => {
         const container = svgEl.parentElement;
         container.scrollLeft = 0;
 
-        const viewW = container.clientWidth  || 1200;
+        const viewW = container.clientWidth || 1200;
         const viewH = container.clientHeight || 600;
-        const k     = currentZoom.k;
+        const k = currentZoom.k;
 
         const newTx = viewW / 2 - k * node.x;
         const newTy = viewH / 2 - k * node.y;
@@ -1092,9 +1123,9 @@ const Visualization = (() => {
         const container = svgEl.parentElement;
         container.scrollLeft = 0;
 
-        const viewW = container.clientWidth  || 1200;
+        const viewW = container.clientWidth || 1200;
         const viewH = container.clientHeight || 600;
-        const k     = currentZoom.k;
+        const k = currentZoom.k;
 
         const newTx = viewW / 2 - k * node.x;
         const newTy = viewH / 2 - k * node.y;
