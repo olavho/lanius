@@ -43,6 +43,16 @@ public class LayoutResponse
     public DateTimeOffset? MaxTimestamp { get; init; }
 
     /// <summary>
+    /// X-pixel (in node/g-space) where tMin lands. Timeline mode only.
+    /// </summary>
+    public double? TimelineOriginX { get; init; }
+
+    /// <summary>
+    /// Pixels per second along the time axis. Timeline mode only.
+    /// </summary>
+    public double? TimelinePixelsPerSecond { get; init; }
+
+    /// <summary>
     /// Total number of commits included in the layout.
     /// </summary>
     public int TotalCommits { get; init; }
@@ -51,6 +61,28 @@ public class LayoutResponse
     /// Total number of branches included in the layout.
     /// </summary>
     public int TotalBranches { get; init; }
+
+    /// <summary>
+    /// Number of branch rows in the grid.
+    /// </summary>
+    public int RowCount { get; init; }
+
+    /// <summary>
+    /// Number of time columns in the grid.
+    /// </summary>
+    public int ColumnCount { get; init; }
+
+    /// <summary>
+    /// Fixed pixel width of each calendar column (month/week/day granularity).
+    /// Null for year granularity.
+    /// </summary>
+    public double? CalendarColumnWidthPx { get; init; }
+
+    /// <summary>
+    /// Granularity used for calendar layout: "Month", "Week", "Day", or "Year".
+    /// Null for non-calendar layouts.
+    /// </summary>
+    public string? CalendarGranularity { get; init; }
 }
 
 /// <summary>
@@ -99,9 +131,59 @@ public class LayoutNodeDto
     public string? Author { get; init; }
 
     /// <summary>
+    /// Commit author email.
+    /// </summary>
+    public string? AuthorEmail { get; init; }
+
+    /// <summary>
+    /// Committer name.
+    /// </summary>
+    public string? Committer { get; init; }
+
+    /// <summary>
+    /// Committer email.
+    /// </summary>
+    public string? CommitterEmail { get; init; }
+
+    /// <summary>
+    /// When the commit was committed.
+    /// </summary>
+    public DateTimeOffset? CommitterTimestamp { get; init; }
+
+    /// <summary>
+    /// Parent commit SHAs.
+    /// </summary>
+    public List<string> ParentShas { get; init; } = [];
+
+    /// <summary>
     /// Whether this is a significant commit (merge, tag, etc.).
     /// </summary>
     public bool IsSignificant { get; init; }
+
+    /// <summary>
+    /// Zero-based grid row (branch lane index).
+    /// </summary>
+    public int GridRow { get; init; }
+
+    /// <summary>
+    /// Zero-based grid column (chronological commit index).
+    /// </summary>
+    public int GridColumn { get; init; }
+
+    /// <summary>
+    /// Ghost/shadow reference node — synthetic anchor, not rendered as a commit circle.
+    /// </summary>
+    public bool IsGhost { get; init; }
+
+    /// <summary>
+    /// Number of commits in this calendar group (0 for individual commit nodes).
+    /// </summary>
+    public int CommitCount { get; init; }
+
+    /// <summary>
+    /// Formatted commit listing lines for calendar groups.
+    /// </summary>
+    public List<string> GroupCommitLines { get; init; } = [];
 }
 
 /// <summary>
@@ -148,4 +230,14 @@ public class LayoutEdgeDto
     /// End Y coordinate.
     /// </summary>
     public required double Y2 { get; init; }
+
+    /// <summary>
+    /// Whether this edge is vertical (X1 == X2).
+    /// </summary>
+    public bool IsVertical { get; init; }
+
+    /// <summary>
+    /// Direction of the edge: Horizontal, Upward, or Downward.
+    /// </summary>
+    public required string Direction { get; init; }
 }

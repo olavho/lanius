@@ -51,7 +51,7 @@ public class LogicalLayoutEngine(
 
         // Load all commits for each branch
         sw.Restart();
-        var branchCommits = await LoadAllCommitsAsync(repositoryId, branches, progress, cancellationToken);
+        var (branchCommits, hierarchyInfo) = await LoadAllCommitsAsync(repositoryId, branches, progress, cancellationToken);
         var allCommits = branchCommits.Values.SelectMany(c => c).DistinctBy(c => c.Sha).ToList();
         _logger.LogInformation("[PERF] LoadCommits: {ElapsedMs}ms ({CommitCount} unique commits)", sw.ElapsedMilliseconds, allCommits.Count);
 
@@ -62,12 +62,12 @@ public class LogicalLayoutEngine(
 
         progress?.Report(new LayoutProgress(60, $"Loaded {allCommits.Count} commits", allCommits.Count, allCommits.Count));
 
-        // Assign Y lanes to branches
-        var branchLanes = AssignBranchLanes(branches, options);
+        // Assign branch rows (0-based lane indices)
+        var branchRows = AssignBranchLanes(branches, hierarchyInfo, branchCommits);
 
         // Calculate node positions
         sw.Restart();
-        var nodes = CalculateNodePositions(allCommits, branchCommits, branchLanes, options);
+        var nodes = CalculateNodePositions(allCommits, branchCommits, branchRows, options);
         _logger.LogInformation("[PERF] CalculateNodes: {ElapsedMs}ms ({NodeCount} nodes)", sw.ElapsedMilliseconds, nodes.Count);
 
         progress?.Report(new LayoutProgress(80, $"Calculating edges for {nodes.Count} nodes", nodes.Count, nodes.Count));
@@ -95,7 +95,9 @@ public class LogicalLayoutEngine(
             MinTimestamp = allCommits.Min(c => c.Timestamp),
             MaxTimestamp = allCommits.Max(c => c.Timestamp),
             TotalCommits = allCommits.Count,
-            TotalBranches = branches.Count
+            TotalBranches = branches.Count,
+            RowCount = branchRows.Count,
+            ColumnCount = nodes.Count > 0 ? nodes.Max(n => n.GridColumn) + 1 : 0
         };
     }
 
@@ -107,12 +109,21 @@ public class LogicalLayoutEngine(
         List<DomainBranch> branches;
         if (string.IsNullOrWhiteSpace(branchFilter))
         {
-            branches = (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken)).ToList();
+            branches = [.. (await branchAnalyzer.GetBranchesAsync(repositoryId, includeRemote: true, cancellationToken))];
         }
         else
         {
             var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            branches = (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken)).ToList();
+            // Expand patterns that don't already include the "origin/" prefix so users can
+            // type "main" or "cesarzc/*" instead of "origin/main" / "origin/cesarzc/*".
+            // LibGit2Sharp FriendlyName for remotes is always "origin/<name>".
+            var expandedPatterns = patterns
+                .SelectMany(p => p.StartsWith("origin/", StringComparison.OrdinalIgnoreCase)
+                    ? (IEnumerable<string>)[p]
+                    : [p, "origin/" + p])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            branches = [.. (await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, expandedPatterns, cancellationToken))];
         }
 
         // Filter to origin/* branches only to avoid duplicate processing
@@ -129,7 +140,7 @@ public class LogicalLayoutEngine(
         return remoteBranches;
     }
 
-    private async Task<Dictionary<string, List<DomainCommit>>> LoadAllCommitsAsync(
+    private async Task<(Dictionary<string, List<DomainCommit>>, List<BranchHierarchyInfo>)> LoadAllCommitsAsync(
         string repositoryId,
         List<DomainBranch> branches,
         IProgress<LayoutProgress>? progress,
@@ -165,7 +176,7 @@ public class LogicalLayoutEngine(
                     if (hierarchyInfo.Count == 0)
                     {
                         _logger.LogInformation("No branches to load commits from");
-                        return new Dictionary<string, List<DomainCommit>>();
+                        return (new Dictionary<string, List<DomainCommit>>(), hierarchyInfo);
                     }
 
                     _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
@@ -190,7 +201,7 @@ public class LogicalLayoutEngine(
                     {
                         var totalCached = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
                         _logger.LogInformation("[PERF] GetCommitsBatch: 0ms (all from cache, {CommitCount} unique commits)", totalCached);
-                        return cachedResult;
+                        return (cachedResult, hierarchyInfo);
                     }
 
                     var batchRequest = uncachedBranches.Select(b => (b.Name, b.MergeBaseSha)).ToList();
@@ -211,7 +222,7 @@ public class LogicalLayoutEngine(
                     var totalCommits = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
                     _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches loaded, {CommitCount} unique commits total)",
                         sw.ElapsedMilliseconds, uncachedBranches.Count, totalCommits);
-                    return cachedResult;
+                    return (cachedResult, hierarchyInfo);
                 }, cancellationToken);
             }
             catch (RepositoryNotFoundException ex)
@@ -231,7 +242,7 @@ public class LogicalLayoutEngine(
             if (hierarchyInfo.Count == 0)
             {
                 _logger.LogInformation("No branches to load commits from");
-                return [];
+                return ([], []);
             }
 
             _logger.LogInformation("Loading commits for {BranchCount} branches...", hierarchyInfo.Count);
@@ -256,7 +267,7 @@ public class LogicalLayoutEngine(
             {
                 var totalCached = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
                 _logger.LogInformation("[PERF] GetCommitsBatch: 0ms (all from cache, {CommitCount} unique commits)", totalCached);
-                return cachedResult;
+                return (cachedResult, hierarchyInfo);
             }
 
             var batchRequest = uncachedBranches.Select(b => (b.Name, b.MergeBaseSha)).ToList();
@@ -278,11 +289,11 @@ public class LogicalLayoutEngine(
             var totalCommits = cachedResult.Values.SelectMany(c => c).DistinctBy(c => c.Sha).Count();
             _logger.LogInformation("[PERF] GetCommitsBatch: {ElapsedMs}ms ({BranchCount} branches loaded, {CommitCount} unique commits total)",
                 batchSw.ElapsedMilliseconds, uncachedBranches.Count, totalCommits);
-            return cachedResult;
+            return (cachedResult, hierarchyInfo);
         }
     }
 
-    private IProgress<(int processed, int total, string currentBranch)> CreateBatchProgress(
+    private Progress<(int processed, int total, string currentBranch)> CreateBatchProgress(
         Dictionary<string, BranchHierarchyInfo> hierarchyDict,
         IProgress<LayoutProgress>? progress)
     {
@@ -305,43 +316,61 @@ public class LogicalLayoutEngine(
         });
     }
 
-    private static Dictionary<string, double> AssignBranchLanes(
+    private static Dictionary<string, int> AssignBranchLanes(
         List<DomainBranch> branches,
-        LayoutOptions options)
+        IReadOnlyList<BranchHierarchyInfo> hierarchyInfo,
+        Dictionary<string, List<DomainCommit>> branchCommits)
     {
-        var lanes = new Dictionary<string, double>();
-        double currentY = options.MarginY;
+        var hierarchyMap = hierarchyInfo.ToDictionary(h => h.Name);
 
-        foreach (var branch in branches.OrderBy(b => b.Name))
+        static int GetTier(DomainBranch b, Dictionary<string, BranchHierarchyInfo> map) =>
+            map.TryGetValue(b.Name, out var h) ? (int)h.Tier : (int)BranchTier.Other;
+
+        static DateTimeOffset GetSplitTs(DomainBranch b, Dictionary<string, BranchHierarchyInfo> map) =>
+            map.TryGetValue(b.Name, out var h) && h.SplitTimestamp.HasValue
+                ? h.SplitTimestamp.Value
+                : DateTimeOffset.MaxValue;
+
+        static DateTimeOffset GetFirstCommitTs(DomainBranch b, Dictionary<string, List<DomainCommit>> commits) =>
+            commits.TryGetValue(b.Name, out var list) && list.Count > 0
+                ? list.Min(c => c.Timestamp)
+                : DateTimeOffset.MaxValue;
+
+        var sorted = branches.ToList();
+        sorted.Sort((a, b) =>
         {
-            lanes[branch.Name] = currentY;
-            currentY += options.BranchSpacing;
-        }
+            var tierCmp = GetTier(a, hierarchyMap).CompareTo(GetTier(b, hierarchyMap));
+            if (tierCmp != 0) return tierCmp;
 
-        return lanes;
+            var splitCmp = GetSplitTs(a, hierarchyMap).CompareTo(GetSplitTs(b, hierarchyMap));
+            if (splitCmp != 0) return splitCmp;
+
+            var firstCmp = GetFirstCommitTs(a, branchCommits).CompareTo(GetFirstCommitTs(b, branchCommits));
+            if (firstCmp != 0) return firstCmp;
+
+            return string.Compare(a.Name, b.Name, StringComparison.Ordinal);
+        });
+
+        var rows = new Dictionary<string, int>();
+        for (int i = 0; i < sorted.Count; i++)
+            rows[sorted[i].Name] = i;
+        return rows;
     }
 
     private static List<LayoutNode> CalculateNodePositions(
         List<DomainCommit> allCommits,
         Dictionary<string, List<DomainCommit>> branchCommits,
-        Dictionary<string, double> branchLanes,
+        Dictionary<string, int> branchRows,
         LayoutOptions options)
     {
         var nodes = new List<LayoutNode>();
 
-        // Sort commits chronologically
-        var sortedCommits = allCommits.OrderBy(c => c.Timestamp).ToList();
-        var minTime = sortedCommits.First().Timestamp;
-        var maxTime = sortedCommits.Last().Timestamp;
-        var timeRange = (maxTime - minTime).TotalSeconds;
+        // Sort commits chronologically; ties broken by SHA for determinism
+        var sortedCommits = allCommits.OrderBy(c => c.Timestamp).ThenBy(c => c.Sha).ToList();
 
-        if (timeRange == 0)
-        {
-            timeRange = 1; // Avoid division by zero
-        }
-
-        // Available width for timeline
-        var availableWidth = options.CanvasWidth - (2 * options.MarginX);
+        // Track the next available column per row to prevent two nodes on the
+        // same branch lane from sharing a column (handles identical timestamps).
+        var nextColumnPerRow = new Dictionary<int, int>();
 
         // Create lookup: commit SHA -> branches it belongs to
         var commitToBranches = new Dictionary<string, List<string>>();
@@ -354,29 +383,33 @@ public class LogicalLayoutEngine(
                     value = [];
                     commitToBranches[commit.Sha] = value;
                 }
-
                 value.Add(branchName);
             }
         }
 
-        foreach (var commit in sortedCommits)
+        for (int globalIndex = 0; globalIndex < sortedCommits.Count; globalIndex++)
         {
-            // Find primary branch (prefer main/master, including origin/main|origin/master)
+            var commit = sortedCommits[globalIndex];
+
+            // Find primary branch (prefer main/master)
             var commitBranches = commitToBranches.GetValueOrDefault(commit.Sha, []);
-            var primaryBranch = commitBranches.OrderBy(b =>
-                NormalizeBranchName(b) == "main" ? 0 :
-                NormalizeBranchName(b) == "master" ? 1 : 2)
+            var primaryBranch = commitBranches
+                .OrderBy(b => NormalizeBranchName(b) == "main" ? 0 :
+                               NormalizeBranchName(b) == "master" ? 1 : 2)
                 .ThenBy(b => b)
                 .FirstOrDefault() ?? "unknown";
 
-            // Calculate X position based on timestamp
-            var timeDelta = (commit.Timestamp - minTime).TotalSeconds;
-            var x = options.MarginX + (timeDelta / timeRange * availableWidth);
+            var gridRow = branchRows.GetValueOrDefault(primaryBranch, 0);
 
-            // Get Y position from branch lane
-            var y = branchLanes.GetValueOrDefault(primaryBranch, options.MarginY);
+            // Assign the next available column for this row, but never go below
+            // the global chronological index (preserves left-to-right time order).
+            var minColumn = nextColumnPerRow.GetValueOrDefault(gridRow, 0);
+            var gridColumn = Math.Max(globalIndex, minColumn);
+            nextColumnPerRow[gridRow] = gridColumn + 1;
 
-            // Determine if significant (merge commits)
+            var x = options.MarginX + gridColumn * options.ColumnWidth;
+            var y = options.MarginY + gridRow * options.BranchSpacing;
+
             var isSignificant = commit.IsMerge;
 
             nodes.Add(new LayoutNode
@@ -389,10 +422,52 @@ public class LogicalLayoutEngine(
                 Timestamp = commit.Timestamp,
                 Message = commit.Message,
                 Author = commit.Author,
-                IsSignificant = isSignificant
+                AuthorEmail = commit.AuthorEmail,
+                Committer = commit.Committer,
+                CommitterEmail = commit.CommitterEmail,
+                CommitterTimestamp = commit.CommitterTimestamp,
+                ParentShas = commit.ParentShas,
+                IsSignificant = isSignificant,
+                GridRow = gridRow,
+                GridColumn = gridColumn
             });
         }
 
+        // Second pass: add a ghost (shadow-ref) node for each branch split.
+        // The ghost sits at (parentNode.X, childBranchY) — the vertical split edge anchors here,
+        // and the branch lane line starts here. Real commit positions are untouched.
+        var nodeDict = nodes.ToDictionary(n => n.CommitId);
+        var allCommitsDict = allCommits.ToDictionary(c => c.Sha);
+        var ghostNodes = new List<LayoutNode>();
+
+        foreach (var node in nodes)
+        {
+            if (!allCommitsDict.TryGetValue(node.CommitId, out var c2)) continue;
+            if (c2.IsMerge || c2.ParentShas.Count != 1) continue;
+
+            var parentSha = c2.ParentShas[0];
+            if (!nodeDict.TryGetValue(parentSha, out var parentNode)) continue;
+            if (parentNode.BranchName == node.BranchName) continue;  // same-branch parent
+            if (parentNode.X >= node.X) continue;                    // parent not to the left
+
+            ghostNodes.Add(new LayoutNode
+            {
+                CommitId = $"ghost:{node.CommitId}",
+                X = parentNode.X,
+                Y = node.Y,
+                Radius = 0,
+                BranchName = node.BranchName,
+                Timestamp = parentNode.Timestamp,
+                Message = string.Empty,
+                Author = string.Empty,
+                IsSignificant = false,
+                IsGhost = true,
+                GridRow = node.GridRow,
+                GridColumn = parentNode.GridColumn
+            });
+        }
+
+        nodes.AddRange(ghostNodes);
         return nodes;
     }
 
@@ -438,23 +513,32 @@ public class LogicalLayoutEngine(
                 if (parentBranch != childBranch && !string.IsNullOrEmpty(parentBranch) && !string.IsNullOrEmpty(childBranch))
                 {
                     var edgeKey = (parentSha, commit.Sha);
-                    if (processedEdges.Add(edgeKey))
-                    {
-                        // Determine edge type: if commit has multiple parents, it's a merge
-                        var edgeType = commit.ParentShas.Count > 1 ? EdgeType.Merge : EdgeType.Branch;
-
-                        edges.Add(new LayoutEdge
+                        if (processedEdges.Add(edgeKey))
                         {
-                            FromCommitId = parentSha,
-                            ToCommitId = commit.Sha,
-                            Type = edgeType,
-                            X1 = parentNode.X,
-                            Y1 = parentNode.Y,
-                            X2 = childNode.X,
-                            Y2 = childNode.Y,
-                            BranchName = childBranch // Edge belongs to the child branch
-                        });
-                    }
+                            // Determine edge type: if commit has multiple parents, it's a merge
+                            var edgeType = commit.ParentShas.Count > 1 ? EdgeType.Merge : EdgeType.Branch;
+
+                            // Branch (split) edges anchor at the parent commit's X so the line is
+                            // vertical from the parent branch down to the ghost node on the child branch.
+                            // Merge edges anchor at the child (merge) commit's X.
+                            var anchorX = edgeType == EdgeType.Branch ? parentNode.X : childNode.X;
+
+                            edges.Add(new LayoutEdge
+                            {
+                                FromCommitId = parentSha,
+                                ToCommitId = commit.Sha,
+                                Type = edgeType,
+                                X1 = anchorX,
+                                Y1 = parentNode.Y,
+                                X2 = anchorX,
+                                Y2 = childNode.Y,
+                                BranchName = childBranch,
+                                IsVertical = true,
+                                Direction = parentNode.Y < childNode.Y
+                                    ? EdgeDirection.Downward
+                                    : EdgeDirection.Upward
+                            });
+                        }
                 }
             }
         }
@@ -487,7 +571,9 @@ public class LogicalLayoutEngine(
                             Y1 = fromNode.Y,
                             X2 = toNode.X,
                             Y2 = toNode.Y,
-                            BranchName = branchName
+                            BranchName = branchName,
+                            IsVertical = false,
+                            Direction = EdgeDirection.Horizontal
                         });
                     }
                 }

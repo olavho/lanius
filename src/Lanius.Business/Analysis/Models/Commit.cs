@@ -26,6 +26,21 @@ public class Commit
     public required DateTimeOffset Timestamp { get; init; }
 
     /// <summary>
+    /// The committer name (may differ from author for rebased/amended commits).
+    /// </summary>
+    public required string Committer { get; init; }
+
+    /// <summary>
+    /// The committer email.
+    /// </summary>
+    public required string CommitterEmail { get; init; }
+
+    /// <summary>
+    /// When the commit was committed (may differ from Timestamp for rebased/amended commits).
+    /// </summary>
+    public required DateTimeOffset CommitterTimestamp { get; init; }
+
+    /// <summary>
     /// The commit message.
     /// </summary>
     public required string Message { get; init; }

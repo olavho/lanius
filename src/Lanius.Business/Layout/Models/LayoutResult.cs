@@ -41,6 +41,17 @@ public record LayoutResult
     public DateTimeOffset? MaxTimestamp { get; init; }
 
     /// <summary>
+    /// X-pixel position corresponding to MinTimestamp (Timeline mode only).
+    /// Allows the frontend to reconstruct the exact same time→x mapping used by the engine.
+    /// </summary>
+    public double? TimelineOriginX { get; init; }
+
+    /// <summary>
+    /// Pixels per second along the time axis (Timeline mode only).
+    /// </summary>
+    public double? TimelinePixelsPerSecond { get; init; }
+
+    /// <summary>
     /// Total number of commits included in layout.
     /// </summary>
     public int TotalCommits { get; init; }
@@ -49,4 +60,26 @@ public record LayoutResult
     /// Number of branches included in layout.
     /// </summary>
     public int TotalBranches { get; init; }
+
+    /// <summary>
+    /// Number of branch rows in the grid.
+    /// </summary>
+    public int RowCount { get; init; }
+
+    /// <summary>
+    /// Number of time columns in the grid (equals the highest GridColumn + 1).
+    /// </summary>
+    public int ColumnCount { get; init; }
+
+    /// <summary>
+    /// Fixed pixel width of each calendar period column (month/week/day granularity).
+    /// Null for year granularity (uses proportional time positioning instead).
+    /// </summary>
+    public double? CalendarColumnWidthPx { get; init; }
+
+    /// <summary>
+    /// Granularity used for calendar layout (Month/Week/Day/Year).
+    /// Null for non-calendar layouts.
+    /// </summary>
+    public CalendarGranularity? Granularity { get; init; }
 }

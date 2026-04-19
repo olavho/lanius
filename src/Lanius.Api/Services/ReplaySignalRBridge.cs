@@ -1,5 +1,4 @@
 using System.Reactive.Linq;
-using Lanius.Api.DTOs;
 using Lanius.Api.Hubs;
 using Lanius.Business.Replay.Services;
 using Microsoft.AspNetCore.SignalR;
@@ -36,34 +35,11 @@ public class ReplaySignalRBridge(
         var subscription = stream.Subscribe(
             onNext: commit =>
             {
-                // Convert to DTO
-                var commitResponse = new CommitResponse
-                {
-                    Sha = commit.Sha,
-                    Author = commit.Author,
-                    AuthorEmail = commit.AuthorEmail,
-                    Timestamp = commit.Timestamp,
-                    Message = commit.Message,
-                    ShortMessage = commit.ShortMessage,
-                    ParentShas = [.. commit.ParentShas],
-                    IsMerge = commit.IsMerge,
-                    Stats = commit.Stats != null ? new DiffStatsResponse
-                    {
-                        LinesAdded = commit.Stats.LinesAdded,
-                        LinesRemoved = commit.Stats.LinesRemoved,
-                        TotalChanges = commit.Stats.TotalChanges,
-                        NetChange = commit.Stats.NetChange,
-                        FilesChanged = commit.Stats.FilesChanged,
-                        ColorIndicator = commit.Stats.ColorIndicator
-                    } : null,
-                    Branches = [.. commit.Branches]
-                };
-
-                // Broadcast to replay group
+                // Send SHA + sessionId so the frontend can discard stale events from old sessions
                 hubContext.Clients.Group($"replay:{sessionId}")
-                    .SendAsync("ReplayCommit", commitResponse);
+                    .SendAsync("CommitRevealed", new { sha = commit.Sha, sessionId });
 
-                logger.LogDebug("Streamed commit {Sha} for session {SessionId}", commit.Sha, sessionId);
+                logger.LogDebug("Revealed commit {Sha} for session {SessionId}", commit.Sha, sessionId);
             },
             onError: error =>
             {

@@ -11,6 +11,9 @@ let state = {
     relationships: [], // Add relationships array
     replaySessionId: null,
     replaySpeed: 1.0,
+    replayIndex: 0,
+    replayTotalCommits: 0,
+    replayCommitOrder: [],  // ordered sha list matching backend stream order
     layoutMode: 'logical', // Current layout mode
     calendarGranularity: 'month', // Calendar granularity
     stats: {
@@ -23,10 +26,35 @@ let state = {
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
+    restorePanelStates();
+    initPanelToggles();
     initializeEventHandlers();
+    document.getElementById('panel-replay').style.display = state.layoutMode === 'calendar' ? 'none' : '';
     initializeSignalR();
     loadExistingRepositories();
 });
+
+function restorePanelStates() {
+    document.querySelectorAll('.control-panel[id]').forEach(panel => {
+        try {
+            if (localStorage.getItem(`panel-collapsed:${panel.id}`) === '1') {
+                panel.classList.add('control-panel--collapsed');
+            }
+        } catch (e) { /* localStorage unavailable */ }
+    });
+}
+
+function initPanelToggles() {
+    document.querySelectorAll('.panel-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const panel = btn.closest('.control-panel');
+            const isCollapsed = panel.classList.toggle('control-panel--collapsed');
+            try {
+                localStorage.setItem(`panel-collapsed:${panel.id}`, isCollapsed ? '1' : '0');
+            } catch (e) { /* localStorage unavailable */ }
+        });
+    });
+}
 
 // Event Handlers
 function initializeEventHandlers() {
@@ -47,6 +75,18 @@ function initializeEventHandlers() {
         const speed = parseFloat(e.target.value);
         state.replaySpeed = speed;
         document.getElementById('speed-display').textContent = `${speed.toFixed(1)}x`;
+    });
+
+    // Replay scrub slider — preview on drag, seek on release
+    const scrubSlider = document.getElementById('replay-scrub');
+    scrubSlider.addEventListener('input', (e) => {
+        const targetIndex = parseInt(e.target.value);
+        const remaining = state.replayTotalCommits - targetIndex;
+        document.getElementById('np-progress').textContent = `${targetIndex} / ${state.replayTotalCommits}`;
+        document.getElementById('np-time-remaining').textContent = formatDuration(remaining / state.replaySpeed);
+    });
+    scrubSlider.addEventListener('change', (e) => {
+        seekReplay(parseInt(e.target.value));
     });
 
     // Monitoring
@@ -83,12 +123,15 @@ function initializeEventHandlers() {
         state.layoutMode = e.target.value;
         const granularityGroup = document.getElementById('granularity-group');
         const infoText = document.getElementById('layout-mode-info');
+        const replayPanel = document.getElementById('panel-replay');
 
+        granularityGroup.classList.toggle('is-visible', state.layoutMode === 'calendar');
+        replayPanel.style.display = state.layoutMode === 'calendar' ? 'none' : '';
         if (state.layoutMode === 'calendar') {
-            granularityGroup.style.display = 'block';
             infoText.innerHTML = '<small>Groups commits by time periods</small>';
+        } else if (state.layoutMode === 'timeline') {
+            infoText.innerHTML = '<small>Shows each commit at its actual date position</small>';
         } else {
-            granularityGroup.style.display = 'none';
             infoText.innerHTML = '<small>Shows commits on branch timelines</small>';
         }
 
@@ -122,7 +165,7 @@ async function initializeSignalR() {
     // Event handlers
     state.connection.on('ReceiveNewCommits', handleNewCommits);
     state.connection.on('RepositoryUpdated', handleRepositoryUpdated);
-    state.connection.on('ReplayCommit', handleReplayCommit);
+    state.connection.on('CommitRevealed', handleCommitRevealed);
     state.connection.on('ReplayCompleted', handleReplayCompleted);
     state.connection.on('ReplayError', handleReplayError);
     state.connection.on('LayoutProgress', handleLayoutProgress);
@@ -287,6 +330,7 @@ function clearRepositoryState() {
     state.relationships = [];
     state.replaySessionId = null;
 
+    document.querySelector('.sidebar').classList.remove('has-repo');
     // Clear visualization
     clearVisualization();
 
@@ -313,6 +357,7 @@ function clearRepositoryState() {
 async function loadRepository() {
     if (!state.repositoryId) return;
 
+    document.querySelector('.sidebar').classList.add('has-repo');
     try {
         updateStatus('repo-status', 'Loading repository layout...');
         showLayoutProgress('Loading commits...');
@@ -378,6 +423,7 @@ async function loadRepository() {
         // Render visualization with new layout data
         console.log('Calling renderVisualization with layout data');
         renderVisualization();
+        populateReplayBranchList();
 
         hideLayoutProgress();
         updateCanvasInfo(`${layout.totalCommits} commits (${layout.totalBranches} branches)`);
@@ -425,8 +471,29 @@ async function startReplay() {
         return;
     }
 
+    const replayBranch = document.getElementById('replay-branch').value.trim() || 'main';
+
     try {
-        updateStatus('replay-status', 'Starting replay...');
+        updateStatus('replay-status', 'Loading branch...');
+
+        // Load the layout filtered to the selected branch so only those commits are shown
+        await loadReplayLayout(replayBranch);
+
+        // Build ordered commit list — matches backend sort (oldest → newest)
+        state.replayCommitOrder = (state.layoutData?.nodes ?? [])
+            .filter(n => !n.isGhost)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            .map(n => n.commitId);
+        state.replayIndex = 0;
+        state.replayTotalCommits = state.replayCommitOrder.length;
+
+        const scrub = document.getElementById('replay-scrub');
+        scrub.max = state.replayTotalCommits;
+        scrub.value = 0;
+
+        // Hide all commit nodes — revealed one-by-one via CommitRevealed events
+        Visualization.startReplayMode();
+        document.getElementById('stat-commits').textContent = '0';
 
         const response = await fetch(
             `${API_URL}/api/repositories/${state.repositoryId}/replay/start`,
@@ -435,7 +502,8 @@ async function startReplay() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     speed: state.replaySpeed,
-                    branchFilter: document.getElementById('branch-pattern').value.split(',')[0]?.trim()
+                    branchFilter: replayBranch,
+                    startFromBranchSplit: !['main', 'master', 'origin/main', 'origin/master'].includes(replayBranch.toLowerCase())
                 })
             }
         );
@@ -443,11 +511,8 @@ async function startReplay() {
         const session = await response.json();
         state.replaySessionId = session.sessionId;
 
-        // Subscribe to replay stream
+        // Subscribe to replay stream — triggers backend streaming
         await state.connection.invoke('SubscribeToReplay', session.sessionId);
-
-        // Clear visualization for replay
-        clearVisualization();
 
         updateStatus('replay-status', `Playing ${session.totalCommits} commits at ${state.replaySpeed}x`);
         setReplayButtonState(true);
@@ -455,6 +520,45 @@ async function startReplay() {
     } catch (err) {
         console.error('Replay start error:', err);
         updateStatus('replay-status', 'Failed to start replay', true);
+    }
+}
+
+async function loadReplayLayout(branchFilter) {
+    let layoutUrl = `${API_URL}/api/repository/${state.repositoryId}/layout?mode=${state.layoutMode}`;
+    layoutUrl += `&branchFilter=${encodeURIComponent(branchFilter)}`;
+    if (state.layoutMode === 'calendar') {
+        layoutUrl += `&granularity=${state.calendarGranularity}`;
+    }
+
+    const layoutResponse = await fetch(layoutUrl);
+    if (!layoutResponse.ok) {
+        throw new Error(`Failed to load replay layout: ${layoutResponse.statusText}`);
+    }
+
+    const layout = await layoutResponse.json();
+    state.layoutData = layout;
+    renderVisualization();
+}
+
+function populateReplayBranchList() {
+    const datalist = document.getElementById('replay-branch-list');
+    const input = document.getElementById('replay-branch');
+
+    datalist.innerHTML = '';
+    const names = state.branches.map(b => b.name);
+
+    names.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        datalist.appendChild(opt);
+    });
+
+    // Set default to the main/master branch if the current value isn't in the list
+    if (names.length > 0 && !names.includes(input.value)) {
+        const mainBranch = names.find(n =>
+            n === 'main' || n === 'origin/main' || n === 'master' || n === 'origin/master'
+        );
+        input.value = mainBranch ?? names[0];
     }
 }
 
@@ -505,7 +609,9 @@ async function stopReplay() {
         updateStatus('replay-status', 'Stopped');
         setReplayButtonState(false);
 
-        // Reload full visualization
+        // Clear replay state and reload full visualization
+        Visualization.stopReplayMode();
+        document.getElementById('replay-now-playing').classList.add('hidden');
         await loadRepository();
 
     } catch (err) {
@@ -569,21 +675,135 @@ function handleRepositoryUpdated(repo) {
     updateStats(repo);
 }
 
-function handleReplayCommit(commit) {
-    console.log('Replay commit:', commit);
-    animateReplayCommit(commit);
+function handleCommitRevealed(data) {
+    if (data.sessionId !== state.replaySessionId) return;
+    Visualization.revealCommit(data.sha);
+    state.replayIndex++;
+    const el = document.getElementById('stat-commits');
+    el.textContent = String(parseInt(el.textContent) + 1);
+
+    const node = state.layoutData?.nodes?.find(n => n.commitId === data.sha);
+    if (node) {
+        const message = node.message || '';
+        document.getElementById('np-message').textContent = message;
+        document.getElementById('np-sha').textContent = data.sha.substring(0, 8);
+        document.getElementById('np-branch').textContent = node.branchName || '';
+        document.getElementById('np-author').textContent = node.authorEmail
+            ? `${node.author} <${node.authorEmail}>`
+            : node.author || 'Unknown';
+        document.getElementById('np-author-date').textContent = formatIsoDate(node.timestamp);
+        document.getElementById('np-committer').textContent = node.committerEmail
+            ? `${node.committer} <${node.committerEmail}>`
+            : node.committer || '';
+        document.getElementById('np-committer-date').textContent = formatIsoDate(node.committerTimestamp);
+
+        const parentsRow = document.getElementById('np-parents-row');
+        if (node.parentShas && node.parentShas.length > 0) {
+            document.getElementById('np-parents').textContent = node.parentShas.map(s => s.substring(0, 8)).join(', ');
+            parentsRow.style.display = '';
+        } else {
+            parentsRow.style.display = 'none';
+        }
+
+        document.getElementById('replay-now-playing').classList.remove('hidden');
+    }
+
+    updateReplayProgress();
 }
 
 function handleReplayCompleted(data) {
+    if (data.sessionId !== state.replaySessionId) return;
     console.log('Replay completed:', data);
     updateStatus('replay-status', 'Replay completed');
     setReplayButtonState(false);
+    document.getElementById('replay-now-playing').classList.add('hidden');
 }
 
 function handleReplayError(error) {
+    if (error.sessionId && error.sessionId !== state.replaySessionId) return;
     console.error('Replay error:', error);
     updateStatus('replay-status', `Error: ${error.message}`, true);
     setReplayButtonState(false);
+}
+
+function updateReplayProgress() {
+    const { replayIndex, replayTotalCommits, replaySpeed } = state;
+    const remaining = replayTotalCommits - replayIndex;
+    document.getElementById('replay-scrub').value = replayIndex;
+    document.getElementById('np-progress').textContent = `${replayIndex} / ${replayTotalCommits}`;
+    document.getElementById('np-time-remaining').textContent = formatDuration(remaining / replaySpeed);
+}
+
+function formatDuration(seconds) {
+    if (!isFinite(seconds) || seconds <= 0) return '';
+    const m = Math.floor(seconds / 60);
+    const s = Math.ceil(seconds % 60);
+    return m > 0 ? `${m}:${String(s).padStart(2, '0')} remaining` : `${s}s remaining`;
+}
+
+async function seekReplay(targetIndex) {
+    if (!state.repositoryId) return;
+
+    const clampedIndex = Math.max(0, Math.min(targetIndex, state.replayTotalCommits));
+
+    // Null out session ID IMMEDIATELY — before any await — so every in-flight
+    // CommitRevealed / ReplayCompleted event from the old session is rejected
+    // by the session-ID guard in handleCommitRevealed / handleReplayCompleted.
+    const oldSessionId = state.replaySessionId;
+    state.replaySessionId = null;
+
+    // Stop current session if active
+    if (oldSessionId) {
+        try {
+            await fetch(
+                `${API_URL}/api/repositories/${state.repositoryId}/replay/${oldSessionId}/stop`,
+                { method: 'POST' }
+            );
+            await state.connection.invoke('UnsubscribeFromReplay', oldSessionId);
+        } catch (err) {
+            console.warn('seekReplay: stop failed', err);
+        }
+    }
+
+    // Re-hide all nodes, then reveal 0..clampedIndex-1 instantly (no scroll yet)
+    Visualization.startReplayMode();
+    if (clampedIndex > 0) {
+        Visualization.revealRange(state.replayCommitOrder.slice(0, clampedIndex));
+    }
+
+    state.replayIndex = clampedIndex;
+    document.getElementById('stat-commits').textContent = String(clampedIndex);
+    updateReplayProgress();
+
+    // Restart backend stream from the new position
+    const replayBranch = document.getElementById('replay-branch').value.trim() || 'main';
+    try {
+        const response = await fetch(
+            `${API_URL}/api/repositories/${state.repositoryId}/replay/start`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    speed: state.replaySpeed,
+                    branchFilter: replayBranch,
+                    startIndex: clampedIndex
+                })
+            }
+        );
+        const session = await response.json();
+        state.replaySessionId = session.sessionId;
+        await state.connection.invoke('SubscribeToReplay', session.sessionId);
+        setReplayButtonState(true);
+        updateStatus('replay-status', `Playing from ${clampedIndex} / ${state.replayTotalCommits}`);
+    } catch (err) {
+        console.error('seekReplay: restart failed', err);
+        updateStatus('replay-status', 'Seek failed', true);
+    }
+
+    // Jump synchronously LAST — overrides any in-flight CommitRevealed scroll events
+    if (clampedIndex > 0) {
+        Visualization.jumpToCommit(state.replayCommitOrder[clampedIndex - 1]);
+    }
 }
 
 function handleLayoutProgress(progress) {
@@ -645,12 +865,45 @@ function setReplayButtonState(isPlaying) {
     document.getElementById('replay-stop').disabled = !isPlaying;
 }
 
+function formatIsoDate(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d)) return '';
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 function showCommitDetail(commit) {
+    // Reset to normal (individual commit) view
+    document.getElementById('detail-sha-label').textContent = 'SHA';
+    document.getElementById('detail-author-row').style.display = '';
+    document.getElementById('detail-author-date-label').textContent = 'Author date';
+    document.getElementById('detail-committer-row').style.display = '';
+    document.getElementById('detail-committer-date-row').style.display = '';
+    document.getElementById('detail-commit-count-row').style.display = 'none';
+    document.getElementById('detail-parents-row').style.display = '';
+
     document.getElementById('detail-sha').textContent = commit.sha.substring(0, 8);
-    document.getElementById('detail-author').textContent = `${commit.author} <${commit.authorEmail}>`;
-    document.getElementById('detail-date').textContent = new Date(commit.timestamp).toLocaleString();
-    document.getElementById('detail-branches').textContent = commit.branches.join(', ');
-    document.getElementById('detail-message').textContent = commit.message;
+    document.getElementById('detail-author').textContent = commit.authorEmail
+        ? `${commit.author} <${commit.authorEmail}>`
+        : commit.author || 'Unknown';
+    document.getElementById('detail-author-date').textContent = formatIsoDate(commit.timestamp);
+    document.getElementById('detail-committer').textContent = commit.committerEmail
+        ? `${commit.committer} <${commit.committerEmail}>`
+        : commit.committer || '';
+    document.getElementById('detail-committer-date').textContent = formatIsoDate(commit.committerTimestamp);
+    document.getElementById('detail-branches').textContent = (commit.branches || []).join(', ');
+
+    const parentsRow = document.getElementById('detail-parents-row');
+    if (commit.parentShas && commit.parentShas.length > 0) {
+        document.getElementById('detail-parents').textContent = commit.parentShas.map(s => s.substring(0, 8)).join(', ');
+        parentsRow.style.display = '';
+    } else {
+        parentsRow.style.display = 'none';
+    }
+
+    const message = commit.message || '';
+    document.getElementById('detail-message').textContent = message;
 
     if (commit.stats) {
         document.getElementById('detail-additions').textContent = `+${commit.stats.linesAdded}`;
@@ -665,9 +918,56 @@ function hideCommitDetail() {
     document.getElementById('commit-detail').classList.add('hidden');
 }
 
+function showCalendarGroupDetail(node) {
+    const gran = (state.layoutData?.calendarGranularity || 'month').toLowerCase();
+
+    document.getElementById('detail-sha-label').textContent = 'Group';
+    document.getElementById('detail-author-row').style.display = 'none';
+    document.getElementById('detail-committer-row').style.display = 'none';
+    document.getElementById('detail-committer-date-row').style.display = 'none';
+    document.getElementById('detail-parents-row').style.display = 'none';
+    document.getElementById('detail-commit-count-row').style.display = '';
+
+    // Group ID (period key)
+    document.getElementById('detail-sha').textContent = node.commitId || '';
+
+    // Date label and value
+    const dateLabel = gran === 'day' ? 'Date' :
+                      gran === 'week' ? 'Week start' :
+                      gran === 'year' ? 'Year' : 'Month';
+    document.getElementById('detail-author-date-label').textContent = dateLabel;
+    const ts = new Date(node.timestamp);
+    let dateValue;
+    if (gran === 'day') {
+        dateValue = ts.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } else if (gran === 'week') {
+        dateValue = ts.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    } else if (gran === 'year') {
+        dateValue = String(ts.getFullYear());
+    } else {
+        dateValue = ts.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    }
+    document.getElementById('detail-author-date').textContent = dateValue;
+
+    document.getElementById('detail-branches').textContent = 'all';
+    document.getElementById('detail-commit-count').textContent = node.commitCount || (node.groupCommitLines || []).length || '';
+
+    // Commit listing in textarea
+    const lines = node.groupCommitLines || [];
+    document.getElementById('detail-message').textContent = lines.join('\n');
+
+    // Hide diff stats
+    document.getElementById('detail-additions').textContent = '';
+    document.getElementById('detail-deletions').textContent = '';
+    document.getElementById('detail-files').textContent = '';
+
+    document.getElementById('commit-detail').classList.remove('hidden');
+}
+
 // Export for visualization module
 window.LaniusApp = {
     state,
     showCommitDetail,
+    showCalendarGroupDetail,
     updateStats
 };

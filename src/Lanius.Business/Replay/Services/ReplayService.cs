@@ -2,6 +2,8 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Lanius.Business.Analysis.Models;
 using Lanius.Business.Analysis.Services;
+using Lanius.Business.Layout.Models;
+using Lanius.Business.Layout.Services;
 using Lanius.Business.Replay.Models;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -24,18 +26,46 @@ public class ReplayService(IServiceProvider serviceProvider) : IReplayService
         using var scope = serviceProvider.CreateScope();
         var commitAnalyzer = scope.ServiceProvider.GetRequiredService<ICommitAnalyzer>();
 
-        // Get commits chronologically
-        var commits = await commitAnalyzer.GetCommitsChronologicallyAsync(
-            repositoryId,
-            options.StartDate,
-            options.EndDate,
-            cancellationToken);
+        IReadOnlyList<Commit> commits;
 
-        // Filter by branch if specified
         if (!string.IsNullOrWhiteSpace(options.BranchFilter))
         {
-            commits = [.. commits.Where(c => c.Branches.Contains(options.BranchFilter, StringComparer.OrdinalIgnoreCase))];
+            // When requested, start from the branch split point (merge base) so replay
+            // begins where the branch diverged from its parent, not the repo root.
+            string? mergeBaseSha = null;
+            if (options.StartFromBranchSplit)
+                mergeBaseSha = await ResolveMergeBaseShaAsync(repositoryId, options.BranchFilter, scope, cancellationToken);
+
+            // Fetch commits for the specific branch — LibGit2Sharp resolves "origin/main" natively
+            commits = await commitAnalyzer.GetCommitsSinceAsync(
+                repositoryId,
+                options.BranchFilter,
+                sinceCommitSha: mergeBaseSha,
+                cancellationToken);
+
+            // Apply date range if specified
+            if (options.StartDate.HasValue || options.EndDate.HasValue)
+            {
+                commits = [.. commits.Where(c =>
+                    (!options.StartDate.HasValue || c.Timestamp >= options.StartDate.Value) &&
+                    (!options.EndDate.HasValue || c.Timestamp <= options.EndDate.Value))];
+            }
         }
+        else
+        {
+            commits = await commitAnalyzer.GetCommitsChronologicallyAsync(
+                repositoryId,
+                options.StartDate,
+                options.EndDate,
+                cancellationToken);
+        }
+
+        // Replay must stream oldest → newest so commits appear left-to-right on the timeline
+        commits = [.. commits.OrderBy(c => c.Timestamp)];
+
+        // Skip commits before StartIndex (used for scrub/seek)
+        if (options.StartIndex > 0 && options.StartIndex < commits.Count)
+            commits = [.. commits.Skip(options.StartIndex)];
 
         var sessionId = Guid.NewGuid().ToString("N");
         var session = new ReplaySession
@@ -146,6 +176,40 @@ public class ReplayService(IServiceProvider serviceProvider) : IReplayService
                 return context.Subject.AsObservable();
             }
             return Observable.Empty<Commit>();
+        }
+    }
+
+    private static async Task<string?> ResolveMergeBaseShaAsync(
+        string repositoryId,
+        string branchFilter,
+        IServiceScope scope,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var branchAnalyzer = scope.ServiceProvider.GetRequiredService<IBranchAnalyzer>();
+            var hierarchyAnalyzer = scope.ServiceProvider.GetRequiredService<IBranchHierarchyAnalyzer>();
+
+            // Expand bare name (e.g. "main" → "origin/main") same as layout engine
+            var patterns = branchFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .SelectMany(p => p.StartsWith("origin/", StringComparison.OrdinalIgnoreCase)
+                    ? (IEnumerable<string>)[p]
+                    : [p, "origin/" + p])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var branches = await branchAnalyzer.GetBranchesByPatternAsync(repositoryId, patterns, cancellationToken);
+            if (branches.Count == 0)
+                return null;
+
+            var hierarchy = await hierarchyAnalyzer.AnalyzeBranchHierarchyAsync(
+                repositoryId, [.. branches], progress: null, cancellationToken);
+
+            return hierarchy.FirstOrDefault(h => h.MergeBaseSha != null)?.MergeBaseSha;
+        }
+        catch
+        {
+            return null; // Fall back to full history on any error
         }
     }
 

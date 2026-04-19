@@ -13,5 +13,10 @@ public enum LayoutMode
     /// <summary>
     /// Calendar-based layout grouping commits by time periods.
     /// </summary>
-    Calendar
+    Calendar,
+
+    /// <summary>
+    /// Timeline layout placing each commit at its real date on a proportional x-axis.
+    /// </summary>
+    Timeline
 }

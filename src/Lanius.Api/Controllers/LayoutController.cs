@@ -60,6 +60,7 @@ public class LayoutController(
             {
                 LayoutMode.Logical => serviceProvider.GetRequiredService<LogicalLayoutEngine>(),
                 LayoutMode.Calendar => serviceProvider.GetRequiredService<CalendarLayoutEngine>(),
+                LayoutMode.Timeline => serviceProvider.GetRequiredService<TimelineLayoutEngine>(),
                 _ => throw new ArgumentException($"Unsupported layout mode: {mode}")
             };
 
@@ -94,7 +95,17 @@ public class LayoutController(
                     Timestamp = n.Timestamp,
                     Message = n.Message,
                     Author = n.Author,
-                    IsSignificant = n.IsSignificant
+                    AuthorEmail = n.AuthorEmail,
+                    Committer = n.Committer,
+                    CommitterEmail = n.CommitterEmail,
+                    CommitterTimestamp = n.CommitterTimestamp,
+                    ParentShas = [.. n.ParentShas],
+                    IsSignificant = n.IsSignificant,
+                    GridRow = n.GridRow,
+                    GridColumn = n.GridColumn,
+                    IsGhost = n.IsGhost,
+                    CommitCount = n.CommitCount,
+                    GroupCommitLines = [.. n.GroupCommitLines]
                 })],
                 Edges = [.. result.Edges.Select(e => new LayoutEdgeDto
                 {
@@ -105,14 +116,22 @@ public class LayoutController(
                     X1 = e.X1,
                     Y1 = e.Y1,
                     X2 = e.X2,
-                    Y2 = e.Y2
+                    Y2 = e.Y2,
+                    IsVertical = e.IsVertical,
+                    Direction = e.Direction.ToString()
                 })],
                 Width = result.Width,
                 Height = result.Height,
                 MinTimestamp = result.MinTimestamp,
                 MaxTimestamp = result.MaxTimestamp,
+                TimelineOriginX = result.TimelineOriginX,
+                TimelinePixelsPerSecond = result.TimelinePixelsPerSecond,
                 TotalCommits = result.TotalCommits,
-                TotalBranches = result.TotalBranches
+                TotalBranches = result.TotalBranches,
+                RowCount = result.RowCount,
+                ColumnCount = result.ColumnCount,
+                CalendarColumnWidthPx = result.CalendarColumnWidthPx,
+                CalendarGranularity = result.Granularity?.ToString()
             };
 
             logger.LogInformation(

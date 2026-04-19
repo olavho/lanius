@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lanius - Git Repository Visualization</title>
+    <title>Lanius - Git repository visualization</title>
     <link rel="stylesheet" href="css/styles.css">
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
@@ -14,135 +14,186 @@
         <header class="app-header">
             <div class="header-content">
                 <h1 class="app-title">LANIUS</h1>
-                <div class="header-subtitle">Git Repository Visualization System</div>
+                <div class="header-subtitle">Git repository visualization</div>
             </div>
         </header>
 
         <!-- Main Content -->
         <div class="main-content">
             <!-- Sidebar Controls -->
-            <aside class="sidebar">
-                <section class="control-panel">
-                    <h2 class="panel-title">Repository</h2>
-                    <div class="control-group">
-                        <label class="control-label">Existing Repositories</label>
-                        <select id="repo-select" class="input-field">
-                            <option value="">-- Select or enter new URL --</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <input type="text" id="repo-url" class="input-field"
-                               placeholder="https://github.com/user/repo.git">
-                        <button id="clone-btn" class="btn btn-primary">Clone</button>
-                    </div>
-                    <div class="status-line" id="repo-status"></div>
-                </section>
-
-                <section class="control-panel">
-                    <h2 class="panel-title">Branch Filter</h2>
-                    <div class="control-group">
-                        <input type="text" id="branch-pattern" class="input-field"
-                               placeholder="main, release/*" value="">
-                        <button id="filter-btn" class="btn">Apply</button>
-                    </div>
-                </section>
-
-                <section class="control-panel">
-                    <h2 class="panel-title">Layout Mode</h2>
-                    <div class="control-group">
-                        <label class="control-label">Visualization Type</label>
-                        <select id="layout-mode" class="input-field">
-                            <option value="logical" selected>Logical (Branch Lines)</option>
-                            <option value="calendar">Calendar (Time Groups)</option>
-                        </select>
-                    </div>
-                    <div class="control-group" id="granularity-group" style="display: none;">
-                        <label class="control-label">Calendar Granularity</label>
-                        <select id="calendar-granularity" class="input-field">
-                            <option value="day">Day</option>
-                            <option value="week">Week</option>
-                            <option value="month" selected>Month</option>
-                            <option value="year">Year</option>
-                        </select>
-                    </div>
-                    <div class="info-text" id="layout-mode-info">
-                        <small>Shows commits on branch timelines</small>
-                    </div>
-                </section>
-
-                <section class="control-panel">
-                    <h2 class="panel-title">Replay Mode</h2>
-                    <div class="control-group">
-                        <label class="control-label">
-                            Speed: <span id="speed-display">1.0x</span>
-                        </label>
-                        <input type="range" id="speed-slider" class="slider"
-                               min="0.1" max="5" step="0.1" value="1.0">
-                    </div>
-                    <div class="button-row">
-                        <button id="replay-start" class="btn btn-primary">Start</button>
-                        <button id="replay-pause" class="btn" disabled>Pause</button>
-                        <button id="replay-resume" class="btn" disabled>Resume</button>
-                        <button id="replay-stop" class="btn" disabled>Stop</button>
-                    </div>
-                    <div class="status-line" id="replay-status"></div>
-                </section>
-
-                <!-- Zoom Controls -->
-                <section class="control-panel">
-                    <h2 class="panel-title">Zoom Controls</h2>
-                    <div class="button-row">
-                        <button id="zoom-in" class="btn btn-secondary" title="Zoom In (Ctrl++)">
-                            🔍+ Zoom In
-                        </button>
-                        <button id="zoom-out" class="btn btn-secondary" title="Zoom Out (Ctrl-)">
-                            🔍− Zoom Out
-                        </button>
-                        <button id="zoom-reset" class="btn btn-secondary" title="Reset Zoom (Ctrl+0)">
-                            ↺ Reset
+            <aside class="sidebar" id="sidebar">
+                <section class="control-panel" id="panel-repository">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Repository</h2>
+                        <button class="panel-toggle" aria-label="Toggle Repository panel">
+                            <span class="panel-toggle-chevron">▾</span>
                         </button>
                     </div>
-                    <div class="info-text">
-                        <small>Or use mouse wheel to zoom, click+drag to pan</small>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">Existing repositories</label>
+                            <select id="repo-select" class="input-field">
+                                <option value="">-- Select or enter new URL --</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <input type="text" id="repo-url" class="input-field"
+                                   placeholder="https://github.com/user/repo.git">
+                            <button id="clone-btn" class="btn btn-primary">Clone</button>
+                        </div>
+                        <div class="status-line status-line-fixed" id="repo-status"></div>
                     </div>
                 </section>
 
-                <section class="control-panel">
-                    <h2 class="panel-title">Statistics</h2>
-                    <div class="stats-grid">
-                        <div class="stat-item">
-                            <div class="stat-label">Total Commits</div>
-                            <div class="stat-value" id="stat-commits">0</div>
+                <section class="control-panel" id="panel-statistics" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Statistics</h2>
+                        <button class="panel-toggle" aria-label="Toggle statistics panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <div class="stat-label">Total commits</div>
+                                <div class="stat-value" id="stat-commits">0</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-label">Total branches</div>
+                                <div class="stat-value" id="stat-branches">0</div>
+                            </div>
                         </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Total Branches</div>
-                            <div class="stat-value" id="stat-branches">0</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Lines Added</div>
-                            <div class="stat-value stat-positive" id="stat-additions">+0</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Lines Removed</div>
-                            <div class="stat-value stat-negative" id="stat-deletions">-0</div>
+                        <div style="display:none">
+                            <div id="stat-additions">+0</div>
+                            <div id="stat-deletions">-0</div>
                         </div>
                     </div>
                 </section>
 
-                <section class="control-panel">
-                    <h2 class="panel-title">Real-Time Monitor</h2>
-                    <div class="button-row">
-                        <button id="monitor-start" class="btn">Start</button>
-                        <button id="monitor-stop" class="btn" disabled>Stop</button>
+                <section class="control-panel" id="panel-branch-filter" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Branch filter</h2>
+                        <button class="panel-toggle" aria-label="Toggle branch filter panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
                     </div>
-                    <div class="status-line" id="monitor-status"></div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <input type="text" id="branch-pattern" class="input-field"
+                                   placeholder="main, release/*" value="">
+                            <button id="filter-btn" class="btn">Apply</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-layout" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Layout mode</h2>
+                        <button class="panel-toggle" aria-label="Toggle Layout Mode panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">Visualization type</label>
+                            <select id="layout-mode" class="input-field">
+                                <option value="logical" selected>Logical (branches)</option>
+                                <option value="calendar">Calendar (grouped)</option>
+                                <option value="timeline">Timeline (true dates)</option>
+                            </select>
+                        </div>
+                        <div class="control-group" id="granularity-group">
+                            <label class="control-label">Calendar granularity</label>
+                            <select id="calendar-granularity" class="input-field">
+                                <option value="day">Day</option>
+                                <option value="week">Week</option>
+                                <option value="month" selected>Month</option>
+                                <option value="year">Year</option>
+                            </select>
+                        </div>
+                        <div class="info-text" id="layout-mode-info">
+                            <small>Shows commits on branch timelines</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-replay" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Replay mode</h2>
+                        <button class="panel-toggle" aria-label="Toggle Replay Mode panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="control-group">
+                            <label class="control-label">Branch</label>
+                            <input type="text" id="replay-branch" class="input-field"
+                                   placeholder="main" value="main" list="replay-branch-list">
+                            <datalist id="replay-branch-list"></datalist>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">
+                                Speed: <span id="speed-display">1.0x</span>
+                            </label>
+                            <input type="range" id="speed-slider" class="slider"
+                                   min="0.1" max="5" step="0.1" value="1.0">
+                        </div>
+                        <div class="button-row">
+                            <button id="replay-start" class="btn btn-primary">Start</button>
+                            <button id="replay-pause" class="btn" disabled>Pause</button>
+                            <button id="replay-resume" class="btn" disabled>Resume</button>
+                            <button id="replay-stop" class="btn" disabled>Stop</button>
+                        </div>
+                        <div class="status-line" id="replay-status"></div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-zoom" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Zoom controls</h2>
+                        <button class="panel-toggle" aria-label="Toggle zoom controls panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="button-row">
+                            <button id="zoom-in" class="btn btn-secondary" title="Zoom in (Ctrl++)">
+                                Zoom in
+                            </button>
+                            <button id="zoom-out" class="btn btn-secondary" title="Zoom out (Ctrl-)">
+                                Zoom out
+                            </button>
+                            <button id="zoom-reset" class="btn btn-secondary" title="Reset zoom (Ctrl+0)">
+                                Reset
+                            </button>
+                        </div>
+                        <div class="info-text">
+                            <small>Or use mouse wheel to zoom, click+drag to pan</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="control-panel" id="panel-monitor" data-requires-repo>
+                    <div class="panel-header">
+                        <h2 class="panel-title">Real-time monitor</h2>
+                        <button class="panel-toggle" aria-label="Toggle real-time monitor panel">
+                            <span class="panel-toggle-chevron">▾</span>
+                        </button>
+                    </div>
+                    <div class="panel-body">
+                        <div class="button-row">
+                            <button id="monitor-start" class="btn">Start</button>
+                            <button id="monitor-stop" class="btn" disabled>Stop</button>
+                        </div>
+                        <div class="status-line" id="monitor-status"></div>
+                    </div>
                 </section>
             </aside>
 
             <!-- Visualization Canvas -->
             <main class="visualization-container">
                 <div class="canvas-header">
-                    <div class="canvas-title">Branch Overview</div>
+                    <div class="canvas-title">Branch overview</div>
                     <div class="canvas-info" id="canvas-info"></div>
                 </div>
 
@@ -155,11 +206,53 @@
                     </div>
                     <div style="display: flex; align-items: center; margin-bottom: 4px;">
                         <svg width="30" height="2" style="margin-right: 8px;"><line x1="0" y1="1" x2="30" y2="1" stroke="#4CAF50" stroke-width="2" stroke-dasharray="5,5" /></svg>
-                        <span>Branch Split</span>
+                        <span>Branch split</span>
                     </div>
                     <div style="display: flex; align-items: center;">
                         <svg width="30" height="2" style="margin-right: 8px;"><line x1="0" y1="1" x2="30" y2="1" stroke="#FF9800" stroke-width="2" stroke-dasharray="3,3" /></svg>
-                        <span>Merge</span>
+                        <span>Branch merge</span>
+                    </div>
+                </div>
+
+                <!-- Replay Now Playing panel -->
+                <div id="replay-now-playing" class="replay-now-playing hidden">
+                    <div class="replay-now-playing-header">Now playing</div>
+                    <div class="replay-np-message" id="np-message"></div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">SHA</span>
+                        <span class="replay-np-value" id="np-sha"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Branch</span>
+                        <span class="replay-np-value" id="np-branch"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Author</span>
+                        <span class="replay-np-value" id="np-author"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Author date</span>
+                        <span class="replay-np-value" id="np-author-date"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Committer</span>
+                        <span class="replay-np-value" id="np-committer"></span>
+                    </div>
+                    <div class="replay-np-row">
+                        <span class="replay-np-label">Committer date</span>
+                        <span class="replay-np-value" id="np-committer-date"></span>
+                    </div>
+                    <div class="replay-np-row" id="np-parents-row">
+                        <span class="replay-np-label">Parents</span>
+                        <span class="replay-np-value" id="np-parents"></span>
+                    </div>
+                    <div class="replay-np-footer">
+                        <div class="replay-np-progress-row">
+                            <span id="np-progress" class="replay-np-progress">0 / 0</span>
+                            <span id="np-time-remaining" class="replay-np-time"></span>
+                        </div>
+                        <input type="range" id="replay-scrub" class="replay-scrub-slider"
+                               min="0" max="100" value="0" step="1">
                     </div>
                 </div>
 
@@ -176,25 +269,41 @@
                 <!-- Commit Detail Popup -->
                 <div id="commit-detail" class="commit-detail hidden">
                     <div class="detail-header">
-                        <div class="detail-title">Commit Details</div>
+                        <div class="detail-title">Commit details</div>
                         <button class="detail-close">&times;</button>
                     </div>
                     <div class="detail-content">
                         <div class="detail-row">
-                            <span class="detail-label">SHA:</span>
+                            <span class="detail-label" id="detail-sha-label">SHA</span>
                             <span class="detail-value" id="detail-sha"></span>
                         </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Author:</span>
+                        <div class="detail-row" id="detail-author-row">
+                            <span class="detail-label">Author</span>
                             <span class="detail-value" id="detail-author"></span>
                         </div>
                         <div class="detail-row">
-                            <span class="detail-label">Date:</span>
-                            <span class="detail-value" id="detail-date"></span>
+                            <span class="detail-label" id="detail-author-date-label">Author date</span>
+                            <span class="detail-value" id="detail-author-date"></span>
+                        </div>
+                        <div class="detail-row" id="detail-committer-row">
+                            <span class="detail-label">Committer</span>
+                            <span class="detail-value" id="detail-committer"></span>
+                        </div>
+                        <div class="detail-row" id="detail-committer-date-row">
+                            <span class="detail-label">Committer date</span>
+                            <span class="detail-value" id="detail-committer-date"></span>
                         </div>
                         <div class="detail-row">
-                            <span class="detail-label">Branches:</span>
+                            <span class="detail-label">Branch</span>
                             <span class="detail-value" id="detail-branches"></span>
+                        </div>
+                        <div class="detail-row" id="detail-commit-count-row" style="display:none">
+                            <span class="detail-label">No. of commits</span>
+                            <span class="detail-value" id="detail-commit-count"></span>
+                        </div>
+                        <div class="detail-row" id="detail-parents-row">
+                            <span class="detail-label">Parents</span>
+                            <span class="detail-value" id="detail-parents"></span>
                         </div>
                         <div class="detail-message" id="detail-message"></div>
                         <div class="detail-stats">

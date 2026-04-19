@@ -113,6 +113,9 @@ public class LogicalLayoutEngineTests
             Sha = "abc123",
             Author = "Test Author",
             AuthorEmail = "test@example.com",
+            Committer = "Test Author",
+            CommitterEmail = "test@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Initial commit",
             ParentShas = []
@@ -163,6 +166,9 @@ public class LogicalLayoutEngineTests
             Sha = "abc123",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Message = "First commit",
             ParentShas = []
@@ -173,6 +179,9 @@ public class LogicalLayoutEngineTests
             Sha = "def456",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Second commit",
             ParentShas = ["abc123"]
@@ -220,6 +229,9 @@ public class LogicalLayoutEngineTests
             Sha = "merge123",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Merge branch 'feature'",
             ParentShas = ["abc123", "def456"] // Two parents = merge
@@ -270,6 +282,9 @@ public class LogicalLayoutEngineTests
             Sha = "commit1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Main commit",
             ParentShas = []
@@ -280,6 +295,9 @@ public class LogicalLayoutEngineTests
             Sha = "commit2",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Dev commit",
             ParentShas = []
@@ -340,8 +358,8 @@ public class LogicalLayoutEngineTests
             .ReturnsAsync([mainBranch, devBranch]);
 
         _mockCommitAnalyzer
-            .Setup(x => x.GetCommitsBatchAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>());
+            .Setup(x => x.GetCommitsBatchAsync(It.IsAny<string>(), It.IsAny<List<(string, string?)>>(), It.IsAny<Progress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
@@ -381,6 +399,9 @@ public class LogicalLayoutEngineTests
             Sha = "commit1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow,
             Timestamp = DateTimeOffset.UtcNow,
             Message = "Test commit",
             ParentShas = []
@@ -471,6 +492,9 @@ public class LogicalLayoutEngineTests
             Sha = "main1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Message = "Main commit",
             ParentShas = []
@@ -481,6 +505,9 @@ public class LogicalLayoutEngineTests
             Sha = "feature1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Message = "Feature commit",
             ParentShas = ["main1"] // Feature branches from main
@@ -501,8 +528,8 @@ public class LogicalLayoutEngineTests
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
-        // Assert
-        Assert.HasCount(2, result.Nodes);
+        // Assert — ghost nodes are synthetic anchors; count only real commit nodes
+        Assert.HasCount(2, result.Nodes.Where(n => !n.IsGhost));
 
         // Should have branch edge from main1 to feature1
         var branchEdge = result.Edges.FirstOrDefault(e =>
@@ -542,6 +569,9 @@ public class LogicalLayoutEngineTests
             Sha = "base1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-3),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-3),
             Message = "Base commit",
             ParentShas = []
@@ -552,6 +582,9 @@ public class LogicalLayoutEngineTests
             Sha = "feature1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-2),
             Message = "Feature work",
             ParentShas = ["base1"]
@@ -562,6 +595,9 @@ public class LogicalLayoutEngineTests
             Sha = "merge1",
             Author = "Author",
             AuthorEmail = "author@example.com",
+            Committer = "Author",
+            CommitterEmail = "author@example.com",
+            CommitterTimestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Timestamp = DateTimeOffset.UtcNow.AddHours(-1),
             Message = "Merge feature into main",
             ParentShas = ["base1", "feature1"] // Two parents = merge (IsMerge computed from this)
@@ -582,8 +618,8 @@ public class LogicalLayoutEngineTests
         // Act
         var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
 
-        // Assert
-        Assert.HasCount(3, result.Nodes);
+        // Assert — ghost nodes are synthetic anchors; count only real commit nodes
+        Assert.HasCount(3, result.Nodes.Where(n => !n.IsGhost));
 
         // Should have merge edge from feature1 to merge1
         var mergeEdge = result.Edges.FirstOrDefault(e =>
@@ -598,6 +634,446 @@ public class LogicalLayoutEngineTests
         var mergeNode = result.Nodes.First(n => n.CommitId == "merge1");
         Assert.IsTrue(mergeNode.IsSignificant);
         Assert.AreEqual(6, mergeNode.Radius);
+    }
+
+    // ── Phase 2: Grid coordinate tests ──────────────────────────────────────
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_SingleBranch_GridColumnsAreChronological()
+    {
+        // Arrange
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+        var commit3 = new Commit { Sha = "c3", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(2), Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2, commit3] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var nodes = result.Nodes.OrderBy(n => n.Timestamp).ToList();
+        Assert.AreEqual(0, nodes[0].GridColumn, "Earliest commit should be column 0");
+        Assert.AreEqual(1, nodes[1].GridColumn, "Middle commit should be column 1");
+        Assert.AreEqual(2, nodes[2].GridColumn, "Latest commit should be column 2");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_SingleBranch_NoColumnCollisionsOnSameRow()
+    {
+        // Arrange: three commits at the same timestamp (maximum collision risk)
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
+        var sameTime = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "aaa", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = sameTime, Timestamp = sameTime, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "bbb", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = sameTime, Timestamp = sameTime, Message = "2", ParentShas = [] };
+        var commit3 = new Commit { Sha = "ccc", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = sameTime, Timestamp = sameTime, Message = "3", ParentShas = [] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2, commit3] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert: all three on the same row — each must have a unique column
+        var columnsOnRow0 = result.Nodes.Where(n => n.GridRow == 0).Select(n => n.GridColumn).ToList();
+        Assert.HasCount(3, columnsOnRow0);
+        Assert.AreEqual(columnsOnRow0.Count, columnsOnRow0.Distinct().Count(), "No two nodes on the same row should share a column");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MultipleBranches_GridRowsMatchBranchOrder()
+    {
+        // Arrange: two branches — 'origin/develop' sorts before 'origin/main' alphabetically
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { BranchSpacing = 40, MarginY = 60 };
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
+        var devBranch = new Branch { Name = "origin/develop", FullName = "refs/remotes/origin/develop", TipSha = "d1", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var mainCommit = new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] };
+        var devCommit = new Commit { Sha = "d1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "dev", ParentShas = [] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([mainBranch, devBranch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [mainCommit], ["origin/develop"] = [devCommit] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert: origin/develop (row 0) and origin/main (row 1)
+        var devNode = result.Nodes.First(n => n.BranchName == "origin/develop");
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
+
+        Assert.AreEqual(0, devNode.GridRow, "origin/develop should be row 0 (alphabetically first)");
+        Assert.AreEqual(1, mainNode.GridRow, "origin/main should be row 1");
+        Assert.AreEqual(options.MarginY, devNode.Y, "Row 0 Y = MarginY");
+        Assert.AreEqual(options.MarginY + options.BranchSpacing, mainNode.Y, "Row 1 Y = MarginY + BranchSpacing");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_ThreeCommits_LayoutResultHasCorrectRowAndColumnCount()
+    {
+        // Arrange
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c3", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commits = new List<Commit>
+        {
+            new() { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] },
+            new() { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] },
+            new() { Sha = "c3", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(2), Timestamp = t0.AddHours(2), Message = "3", ParentShas = ["c2"] }
+        };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = commits });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        Assert.AreEqual(1, result.RowCount, "One branch = one row");
+        Assert.AreEqual(3, result.ColumnCount, "Three commits = three columns");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_GridColumnX_MatchesMarginPlusColumnTimesWidth()
+    {
+        // Arrange
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { MarginX = 50, ColumnWidth = 25.0 };
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c2", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert: X = MarginX + GridColumn * ColumnWidth
+        foreach (var node in result.Nodes)
+        {
+            var expectedX = options.MarginX + node.GridColumn * options.ColumnWidth;
+            Assert.AreEqual(expectedX, node.X, $"Node {node.CommitId}: X should equal MarginX + GridColumn * ColumnWidth");
+        }
+    }
+
+    // ── Phase 3: Branch sorting tests ────────────────────────────────────────
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MainBranch_AlwaysAssignedRowZero()
+    {
+        // Arrange: feature/aaa sorts before main alphabetically; tier must override that
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature/aaa", FullName = "refs/remotes/origin/feature/aaa", TipSha = "f1", IsRemote = true };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] }],
+                ["origin/feature/aaa"] = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "feat", ParentShas = [] }]
+            });
+
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",        Tier = BranchTier.Main,    MergeBaseSha = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/aaa", Tier = BranchTier.Feature, MergeBaseSha = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
+        var featureNode = result.Nodes.First(n => n.BranchName == "origin/feature/aaa");
+
+        Assert.AreEqual(0, mainNode.GridRow, "origin/main must always be row 0 regardless of alphabetical order");
+        Assert.AreEqual(1, featureNode.GridRow, "feature branch should be row 1");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchesSortedBySplitTimestampAscending()
+    {
+        // Arrange: release split before feature — release must occupy the lower row
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var t0 = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
+        var releaseBranch = new Branch { Name = "origin/release/1.0", FullName = "refs/remotes/origin/release/1.0", TipSha = "r1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature/x", FullName = "refs/remotes/origin/feature/x", TipSha = "f1", IsRemote = true };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, releaseBranch, featureBranch]);
+
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] }],
+                ["origin/release/1.0"] = [new Commit { Sha = "r1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddMonths(1), Timestamp = t0.AddMonths(1), Message = "release", ParentShas = [] }],
+                ["origin/feature/x"] = [new Commit { Sha = "f1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddMonths(2), Timestamp = t0.AddMonths(2), Message = "feat", ParentShas = [] }]
+            });
+
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",        Tier = BranchTier.Main,    MergeBaseSha = null, SplitTimestamp = null,            CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/release/1.0", Tier = BranchTier.Release, MergeBaseSha = "m1", SplitTimestamp = t0.AddMonths(1), CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/x",   Tier = BranchTier.Feature, MergeBaseSha = "m1", SplitTimestamp = t0.AddMonths(2), CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
+        var releaseNode = result.Nodes.First(n => n.BranchName == "origin/release/1.0");
+        var featureNode = result.Nodes.First(n => n.BranchName == "origin/feature/x");
+
+        Assert.AreEqual(0, mainNode.GridRow, "main should be row 0");
+        Assert.AreEqual(1, releaseNode.GridRow, "release (earlier split) should be row 1");
+        Assert.AreEqual(2, featureNode.GridRow, "feature (later split) should be row 2");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchesWithoutSplitTimestamp_SortedLastThenAlphabetically()
+    {
+        // Arrange: two feature branches with no split timestamp — go after main, alphabetical order
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
+        var featureABranch = new Branch { Name = "origin/feature/aaa", FullName = "refs/remotes/origin/feature/aaa", TipSha = "fa1", IsRemote = true };
+        var featureBBranch = new Branch { Name = "origin/feature/bbb", FullName = "refs/remotes/origin/feature/bbb", TipSha = "fb1", IsRemote = true };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureABranch, featureBBranch]);
+
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [new Commit { Sha = "m1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "main", ParentShas = [] }],
+                ["origin/feature/aaa"] = [new Commit { Sha = "fa1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "fa", ParentShas = [] }],
+                ["origin/feature/bbb"] = [new Commit { Sha = "fb1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(2), Timestamp = t0.AddHours(2), Message = "fb", ParentShas = [] }]
+            });
+
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",        Tier = BranchTier.Main,    MergeBaseSha = null, SplitTimestamp = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/aaa", Tier = BranchTier.Feature, MergeBaseSha = null, SplitTimestamp = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature/bbb", Tier = BranchTier.Feature, MergeBaseSha = null, SplitTimestamp = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mainNode = result.Nodes.First(n => n.BranchName == "origin/main");
+        var featureANode = result.Nodes.First(n => n.BranchName == "origin/feature/aaa");
+        var featureBNode = result.Nodes.First(n => n.BranchName == "origin/feature/bbb");
+
+        Assert.AreEqual(0, mainNode.GridRow, "main should be row 0");
+        Assert.AreEqual(1, featureANode.GridRow, "feature/aaa should be row 1 (alphabetically before bbb)");
+        Assert.AreEqual(2, featureBNode.GridRow, "feature/bbb should be row 2");
+    }
+
+    // ── Phase 4: Vertical split/merge edges ──────────────────────────────────
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_BranchEdge_IsVertical_X1EqualsX2()
+    {
+        // Arrange: feature splits from main — resulting Branch edge must be vertical
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { MarginX = 100, ColumnWidth = 20.0, MarginY = 60, BranchSpacing = 40 };
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "m1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1", IsRemote = true };
+
+        var mainCommit = new Commit
+        {
+            Sha = "m1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0,
+            Timestamp = t0,
+            Message = "main",
+            ParentShas = []
+        };
+        var featureCommit = new Commit
+        {
+            Sha = "f1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0.AddHours(1),
+            Timestamp = t0.AddHours(1),
+            Message = "feature",
+            ParentShas = ["m1"]
+        };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [mainCommit],
+                ["origin/feature"] = [mainCommit, featureCommit]
+            });
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",    Tier = BranchTier.Main,    MergeBaseSha = null, CommitCount = 1 },
+                new BranchHierarchyInfo { Name = "origin/feature", Tier = BranchTier.Feature, MergeBaseSha = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var branchEdge = result.Edges.First(e => e.Type == EdgeType.Branch);
+        Assert.IsTrue(branchEdge.IsVertical, "Branch edge must be vertical");
+        Assert.AreEqual(branchEdge.X1, branchEdge.X2, "Branch edge X1 must equal X2");
+        Assert.AreEqual(EdgeDirection.Downward, branchEdge.Direction, "Split goes from main (top) to feature (bottom)");
+
+        // X must be at the parent (main) commit's position — the ghost node anchors the split there
+        var mainNode = result.Nodes.First(n => n.CommitId == "m1");
+        Assert.AreEqual(mainNode.X, branchEdge.X1, "Branch edge X must be at parent (main) commit X");
+
+        // A ghost node must exist on the feature lane at the same X as the main commit
+        var ghostNode = result.Nodes.FirstOrDefault(n => n.CommitId == "ghost:f1");
+        Assert.IsNotNull(ghostNode, "Ghost node must exist for the branch split");
+        Assert.IsTrue(ghostNode.IsGhost, "Ghost node must have IsGhost=true");
+        Assert.AreEqual(mainNode.X, ghostNode.X, "Ghost node X must match parent (main) commit X");
+        Assert.AreEqual(0.0, ghostNode.Radius, "Ghost node radius must be 0");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_MergeEdge_IsVertical_X1EqualsX2()
+    {
+        // Arrange: feature merges into main — resulting Merge edge must be vertical
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions { MarginX = 100, ColumnWidth = 20.0, MarginY = 60, BranchSpacing = 40 };
+        var t0 = DateTimeOffset.UtcNow;
+
+        var mainBranch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "merge1", IsRemote = true };
+        var featureBranch = new Branch { Name = "origin/feature", FullName = "refs/remotes/origin/feature", TipSha = "f1", IsRemote = true };
+
+        var baseCommit = new Commit
+        {
+            Sha = "base1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0,
+            Timestamp = t0,
+            Message = "base",
+            ParentShas = []
+        };
+        var featureCommit = new Commit
+        {
+            Sha = "f1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0.AddHours(1),
+            Timestamp = t0.AddHours(1),
+            Message = "feature",
+            ParentShas = ["base1"]
+        };
+        var mergeCommit = new Commit
+        {
+            Sha = "merge1",
+            Author = "A",
+            AuthorEmail = "a@b",
+            Committer = "A",
+            CommitterEmail = "a@b",
+            CommitterTimestamp = t0.AddHours(2),
+            Timestamp = t0.AddHours(2),
+            Message = "merge",
+            ParentShas = ["base1", "f1"]
+        };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([mainBranch, featureBranch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>>
+            {
+                ["origin/main"] = [baseCommit, mergeCommit],
+                ["origin/feature"] = [baseCommit, featureCommit]
+            });
+        _mockBranchHierarchyAnalyzer.Setup(x => x.AnalyzeBranchHierarchyAsync(
+            It.IsAny<string>(), It.IsAny<List<Branch>>(), It.IsAny<IProgress<LayoutProgress>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new BranchHierarchyInfo { Name = "origin/main",    Tier = BranchTier.Main,    MergeBaseSha = null, CommitCount = 2 },
+                new BranchHierarchyInfo { Name = "origin/feature", Tier = BranchTier.Feature, MergeBaseSha = null, CommitCount = 1 }
+            ]);
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var mergeEdge = result.Edges.First(e => e.Type == EdgeType.Merge);
+        Assert.IsTrue(mergeEdge.IsVertical, "Merge edge must be vertical");
+        Assert.AreEqual(mergeEdge.X1, mergeEdge.X2, "Merge edge X1 must equal X2");
+        Assert.AreEqual(EdgeDirection.Upward, mergeEdge.Direction, "Merge goes from feature (bottom) to main (top)");
+
+        // X should be at the merge commit's position
+        var mergeNode = result.Nodes.First(n => n.CommitId == "merge1");
+        Assert.AreEqual(mergeNode.X, mergeEdge.X1, "Merge edge X must be at merge commit X");
+    }
+
+    [TestMethod]
+    public async Task CalculateLayoutAsync_NormalEdge_IsHorizontal()
+    {
+        // Arrange: two commits on same branch produce a horizontal Normal edge
+        var repositoryId = "test-repo";
+        var options = new LayoutOptions();
+        var branch = new Branch { Name = "origin/main", FullName = "refs/remotes/origin/main", TipSha = "c2", IsRemote = true };
+        var t0 = DateTimeOffset.UtcNow;
+        var commit1 = new Commit { Sha = "c1", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0, Timestamp = t0, Message = "1", ParentShas = [] };
+        var commit2 = new Commit { Sha = "c2", Author = "A", AuthorEmail = "a@b", Committer = "A", CommitterEmail = "a@b", CommitterTimestamp = t0.AddHours(1), Timestamp = t0.AddHours(1), Message = "2", ParentShas = ["c1"] };
+
+        _mockBranchAnalyzer.Setup(x => x.GetBranchesAsync(repositoryId, true, It.IsAny<CancellationToken>())).ReturnsAsync([branch]);
+        _mockCommitAnalyzer.Setup(x => x.GetCommitsBatchAsync(repositoryId, It.IsAny<IReadOnlyList<(string, string?)>>(), It.IsAny<IProgress<(int, int, string)>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, IReadOnlyList<Commit>> { ["origin/main"] = [commit1, commit2] });
+
+        // Act
+        var result = await _layoutEngine.CalculateLayoutAsync(repositoryId, options, cancellationToken: TestContext.CancellationToken);
+
+        // Assert
+        var normalEdge = result.Edges.First(e => e.Type == EdgeType.Normal);
+        Assert.IsFalse(normalEdge.IsVertical, "Normal edge must not be vertical");
+        Assert.AreEqual(EdgeDirection.Horizontal, normalEdge.Direction);
+        Assert.AreNotEqual(normalEdge.X1, normalEdge.X2, "Normal edge spans two different X positions");
     }
 }
 

@@ -25,6 +25,12 @@ public class StartReplayRequest
     /// Optional branch filter.
     /// </summary>
     public string? BranchFilter { get; init; }
+
+    /// <summary>
+    /// When true, replay starts from the branch split point (merge base)
+    /// rather than the very first commit in the repository ancestry.
+    /// </summary>
+    public bool StartFromBranchSplit { get; init; } = false;
 }
 
 /// <summary>

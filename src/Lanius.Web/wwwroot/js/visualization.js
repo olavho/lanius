@@ -3,6 +3,9 @@
 
 const Visualization = (() => {
     let svg, g, xScale, yScale, zoomBehavior;
+    let axisG = null;   // fixed SVG-space group for the sticky timeline axis
+    let axisScale = null; // d3 time scale for the axis (separate from xScale)
+    let currentLayout = null; // last layout passed to renderLayout()
     let commitData = [];
     let branchData = [];
     let currentZoom = d3.zoomIdentity; // Preserve zoom state across re-renders
@@ -14,15 +17,17 @@ const Visualization = (() => {
         lineWidth: 1,
         branchSpacing: 40,
         zoomExtent: [0.1, 10], // 10% to 1000% zoom
-        colors: {
-            commitDefault: '#1a1a1a',
-            commitAdditions: '#2d2d2d',
-            commitDeletions: '#0a0a0a',
-            link: '#4a4a4a',
-            branchLine: '#1a1a1a',
-            branchLabel: '#666666'
-        }
     };
+
+    function getBranchClass(branchName) {
+        const name = (branchName || '').toLowerCase().replace(/^origin\//, '');
+        if (name === 'main' || name === 'master') return 'branch--main';
+        if (name.includes('release')) return 'branch--release';
+        if (name.includes('feature')) return 'branch--feature';
+        if (name.includes('hotfix') || name.includes('fix')) return 'branch--fix';
+        if (name.includes('dependabot')) return 'branch--dependabot';
+        return 'branch--other';
+    }
 
     function initialize() {
         const container = document.getElementById('commit-graph');
@@ -33,8 +38,23 @@ const Visualization = (() => {
             .attr('width', width)
             .attr('height', height);
 
+        // Inject arrowhead marker definitions for cross-branch edges
+        svg.append('defs').html(`
+            <marker id="arrow-merge" markerWidth="6" markerHeight="6" refX="5" refY="3"
+                    orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#FF9800"/>
+            </marker>
+            <marker id="arrow-branch" markerWidth="6" markerHeight="6" refX="5" refY="3"
+                    orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#4CAF50"/>
+            </marker>
+        `);
+
         g = svg.append('g')
             .attr('transform', `translate(${config.margin.left}, ${config.margin.top})`);
+
+        // Axis group sits above g in paint order; not zoomed — labels stay fixed in SVG space
+        axisG = svg.append('g').attr('class', 'timeline-axis');
 
         // Create scales
         xScale = d3.scaleTime()
@@ -49,6 +69,7 @@ const Visualization = (() => {
             .on('zoom', (event) => {
                 currentZoom = event.transform;
                 g.attr('transform', event.transform);
+                renderTimelineAxis();
             });
 
         // Apply zoom behavior to SVG
@@ -125,28 +146,22 @@ const Visualization = (() => {
             const x = xScale(item.date);
 
             gridGroup.append('line')
+                .attr('class', 'timeline-grid-line--year')
                 .attr('x1', x)
-                .attr('y1', -10) // Start just above branches (was -config.margin.top + 30)
+                .attr('y1', -10)
                 .attr('x2', x)
-                .attr('y2', yScale.range()[1])
-                .attr('stroke', '#d0d0d0')
-                .attr('stroke-width', 1)
-                .attr('opacity', 0.4);
+                .attr('y2', yScale.range()[1]);
         });
 
-        // Draw labels at top for years - more compact positioning
         const labelGroup = g.append('g').attr('class', 'timeline-label');
 
         years.forEach(item => {
             const x = xScale(item.date);
 
-            // Draw year label - more compact positioning
             labelGroup.append('text')
+                .attr('class', 'timeline-label--year')
                 .attr('x', x + 5)
-                .attr('y', -20) // Closer to branches (was -config.margin.top + 25)
-                .attr('font-size', '11px')
-                .attr('font-weight', 'bold')
-                .attr('fill', config.colors.commitDefault)
+                .attr('y', -20)
                 .text(item.year);
         });
 
@@ -161,27 +176,21 @@ const Visualization = (() => {
             currentDate.setMonth(currentDate.getMonth() + 1);
         }
 
-        // Draw very light month lines (minimal visual impact)
         months.forEach(date => {
             const x = xScale(date);
 
             gridGroup.append('line')
+                .attr('class', 'timeline-grid-line--month')
                 .attr('x1', x)
-                .attr('y1', -5) // Start just above branches
+                .attr('y1', -5)
                 .attr('x2', x)
-                .attr('y2', yScale.range()[1])
-                .attr('stroke', '#f0f0f0')
-                .attr('stroke-width', 0.5)
-                .attr('opacity', 0.15);
+                .attr('y2', yScale.range()[1]);
 
-            // Add tiny month label (optional - can remove if too cluttered)
             const month = date.toLocaleDateString('en-US', { month: 'short' });
             labelGroup.append('text')
+                .attr('class', 'timeline-label--month')
                 .attr('x', x + 2)
-                .attr('y', -5) // Very close to branches (was -config.margin.top + 45)
-                .attr('font-size', '8px')
-                .attr('fill', '#aaa')
-                .attr('opacity', 0.5)
+                .attr('y', -5)
                 .text(month);
         });
     }
@@ -241,83 +250,31 @@ const Visualization = (() => {
 
             console.log(`  Line: ${lineStartX.toFixed(0)} ? ${lineEndX.toFixed(0)}, Y: ${y}`);
 
-            // Branch line - start at first commit, end at last commit
-            branchGroup.append('line')
+            const branchLine = branchGroup.append('line')
                 .attr('class', 'branch-line')
                 .attr('x1', lineStartX)
                 .attr('y1', y)
                 .attr('x2', lineEndX)
-                .attr('y2', y)
-                .attr('stroke', config.colors.branchLine)
-                .attr('stroke-width', config.lineWidth)
-                .attr('opacity', 0)
-                .transition()
-                .duration(500)
-                .attr('opacity', 0.3);
+                .attr('y2', y);
+            setTimeout(() => branchLine.classed('is-visible', true), 0);
 
-            // Branch indicator box - small colored box at start of line
             const fullName = branch.name.replace(/^origin\//, '');
             const boxSize = 8;
-            const boxX = lineStartX - 15; // Position box slightly before line start
+            const boxX = lineStartX - 15;
 
             const indicatorBox = branchGroup.append('rect')
-                .attr('class', 'branch-indicator')
+                .attr('class', `branch-indicator ${getBranchClass(branch.name)}`)
                 .attr('x', boxX)
                 .attr('y', y - boxSize / 2)
                 .attr('width', boxSize)
                 .attr('height', boxSize)
-                .attr('fill', getBranchColor(branch.name, i))
-                .attr('stroke', config.colors.commitDefault)
-                .attr('stroke-width', 1)
-                .attr('rx', 1) // Slight rounding
-                .style('cursor', 'help');
+                .attr('rx', 1);
 
-            // Add hover tooltip showing full branch name (BEFORE transition)
             indicatorBox.append('title').text(fullName);
-
-            // Add hover highlight effect (BEFORE transition)
-            indicatorBox.on('mouseenter', function () {
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr('opacity', 1)
-                    .attr('stroke-width', 2);
-            }).on('mouseleave', function () {
-                d3.select(this)
-                    .transition()
-                    .duration(200)
-                    .attr('opacity', 0.8)
-                    .attr('stroke-width', 1);
-            });
-
-            // Apply fade-in transition AFTER appending title and events
-            indicatorBox
-                .attr('opacity', 0)
-                .transition()
-                .duration(500)
-                .attr('opacity', 0.8);
+            setTimeout(() => indicatorBox.classed('is-visible', true), 0);
         });
 
         console.log('Branch rendering complete');
-    }
-
-    function getBranchColor(branchName, index) {
-        // Color based on branch type
-        if (branchName === 'main' || branchName === 'master' || branchName === 'origin/main') {
-            return '#2d2d2d'; // Dark for main
-        } else if (branchName.includes('release')) {
-            return '#4a90e2'; // Blue for releases
-        } else if (branchName.includes('feature')) {
-            return '#7ed321'; // Green for features
-        } else if (branchName.includes('hotfix') || branchName.includes('fix')) {
-            return '#e74c3c'; // Red for fixes
-        } else if (branchName.includes('dependabot')) {
-            return '#9b59b6'; // Purple for dependabot
-        } else {
-            // Use a color from palette based on index
-            const colors = ['#34495e', '#16a085', '#f39c12', '#e67e22', '#95a5a6'];
-            return colors[index % colors.length];
-        }
     }
 
     function renderCommits() {
@@ -364,16 +321,10 @@ const Visualization = (() => {
                     .attr('x1', xScale(new Date(mergeBaseCommit.timestamp)))
                     .attr('y1', getCommitY(mergeBaseCommit, branchYMap))
                     .attr('x2', xScale(new Date(firstCommitOnBranch.timestamp)))
-                    .attr('y2', getCommitY(firstCommitOnBranch, branchYMap))
-                    .attr('stroke', config.colors.link)
-                    .attr('stroke-width', config.lineWidth)
-                    .attr('stroke-dasharray', '3,3') // Dashed line for branch connections
-                    .attr('opacity', 0)
-                    .transition()
-                    .duration(500)
-                    .attr('opacity', 0.4);
+                    .attr('y2', getCommitY(firstCommitOnBranch, branchYMap));
             }
         });
+        setTimeout(() => g.selectAll('.cross-branch-connection').classed('is-visible', true), 0);
 
         // Draw branch connection lines (between commits on same branch)
         const branchLines = [];
@@ -420,20 +371,15 @@ const Visualization = (() => {
             .attr('x1', d => xScale(new Date(d.source.timestamp)))
             .attr('y1', d => getCommitY(d.source, branchYMap))
             .attr('x2', d => xScale(new Date(d.target.timestamp)))
-            .attr('y2', d => getCommitY(d.target, branchYMap))
-            .attr('stroke', config.colors.link)
-            .attr('stroke-width', config.lineWidth)
-            .attr('opacity', 0)
-            .transition()
-            .duration(500)
-            .attr('opacity', 0.6);
+            .attr('y2', d => getCommitY(d.target, branchYMap));
+        setTimeout(() => g.selectAll('.branch-connection').classed('is-visible', true), 0);
 
         // Draw commits
         const commitNodes = g.selectAll('.commit-node')
             .data(commitData)
             .enter()
             .append('g')
-            .attr('class', 'commit-node')
+            .attr('class', d => `commit-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branches?.[0])}`)
             .attr('transform', d => `translate(${xScale(new Date(d.timestamp))}, ${getCommitY(d, branchYMap)})`)
             .on('click', (event, d) => window.LaniusApp.showCommitDetail(d))
             .on('mouseenter', handleCommitHover)
@@ -441,12 +387,10 @@ const Visualization = (() => {
 
         commitNodes.append('circle')
             .attr('r', 0)
-            .attr('fill', d => getCommitColor(d))
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', config.lineWidth)
             .transition()
             .duration(500)
             .attr('r', d => getCommitSize(d));
+        setTimeout(() => g.selectAll('.commit-node').classed('is-visible', true), 0);
 
         // Update stats
         updateStatsFromCommits();
@@ -463,7 +407,7 @@ const Visualization = (() => {
 
         // Add commit node with animation
         const node = g.append('g')
-            .attr('class', 'commit-node fade-in')
+            .attr('class', `commit-node is-visible ${commit.isSignificant ? 'is-significant' : ''} ${getBranchClass(commit.branches?.[0])}`)
             .attr('transform', `translate(${x}, ${y})`)
             .on('click', (event, d) => window.LaniusApp.showCommitDetail(commit))
             .on('mouseenter', handleCommitHover)
@@ -471,27 +415,20 @@ const Visualization = (() => {
 
         node.append('circle')
             .attr('r', 0)
-            .attr('fill', getCommitColor(commit))
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', config.lineWidth)
-            .style('opacity', 0)
             .transition()
             .duration(750)
             .ease(d3.easeCubicOut)
-            .attr('r', getCommitSize(commit))
-            .style('opacity', 1);
+            .attr('r', getCommitSize(commit));
 
-        // Pulse animation
+        // Pulse animation (radius only)
         node.select('circle')
             .transition()
             .delay(750)
             .duration(1000)
             .attr('r', getCommitSize(commit) * 1.5)
-            .style('opacity', 0.4)
             .transition()
             .duration(500)
-            .attr('r', getCommitSize(commit))
-            .style('opacity', 1);
+            .attr('r', getCommitSize(commit));
     }
 
     function animateReplayCommit(commit) {
@@ -512,6 +449,9 @@ const Visualization = (() => {
 
     function clearAll() {
         g.selectAll('*').remove();
+        if (axisG) axisG.selectAll('*').remove();
+        axisScale = null;
+        currentLayout = null;
         commitData = [];
     }
 
@@ -533,26 +473,6 @@ const Visualization = (() => {
         return config.commitRadius + (scale * 3);
     }
 
-    function getCommitColor(commit) {
-        if (!commit.stats) return config.colors.commitDefault;
-
-        const indicator = commit.stats.colorIndicator || 0;
-
-        // Monochrome gradient based on indicator
-        // -1 (deletions) to +1 (additions)
-        if (indicator > 0) {
-            // More additions: darker
-            const intensity = Math.floor(indicator * 30);
-            return `rgb(${45 - intensity}, ${45 - intensity}, ${45 - intensity})`;
-        } else if (indicator < 0) {
-            // More deletions: lighter
-            const intensity = Math.floor(Math.abs(indicator) * 20);
-            return `rgb(${10 + intensity}, ${10 + intensity}, ${10 + intensity})`;
-        }
-
-        return config.colors.commitDefault;
-    }
-
     function handleCommitHover(event, d) {
         const node = d3.select(event.currentTarget);
 
@@ -560,10 +480,8 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', config.commitRadiusHover)
-            .attr('stroke-width', 2);
+            .attr('r', config.commitRadiusHover);
 
-        // Show tooltip
         showTooltip(event, d);
     }
 
@@ -575,8 +493,7 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', getCommitSize(commit))
-            .attr('stroke-width', config.lineWidth);
+            .attr('r', getCommitSize(commit));
 
         hideTooltip();
     }
@@ -585,15 +502,8 @@ const Visualization = (() => {
         const tooltip = d3.select('body')
             .append('div')
             .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('background', '#fafafa')
-            .style('border', '1px solid #1a1a1a')
-            .style('padding', '8px')
-            .style('font-family', 'var(--font-mono)')
-            .style('font-size', '11px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('opacity', 0);
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px');
 
         tooltip.html(`
             <div><strong>${commit.shortMessage}</strong></div>
@@ -602,20 +512,11 @@ const Visualization = (() => {
             ${commit.stats ? `<div>+${commit.stats.linesAdded} -${commit.stats.linesRemoved}</div>` : ''}
         `);
 
-        tooltip
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 15) + 'px')
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
+        setTimeout(() => tooltip.classed('is-visible', true), 0);
     }
 
     function hideTooltip() {
-        d3.selectAll('.tooltip')
-            .transition()
-            .duration(200)
-            .style('opacity', 0)
-            .remove();
+        d3.selectAll('.tooltip').remove();
     }
 
     function updateStatsFromCommits() {
@@ -637,6 +538,9 @@ const Visualization = (() => {
         yScale.range([0, height - config.margin.top - config.margin.bottom]);
 
         render(commitData, branchData);
+        if (currentLayout?.mode === 'Timeline') {
+            renderTimelineAxis();
+        }
     }
 
     function debounce(func, wait) {
@@ -699,6 +603,8 @@ const Visualization = (() => {
         console.log('Edges:', layout.edges.length);
         console.log('Dimensions:', layout.width, 'x', layout.height);
 
+        currentLayout = layout;
+
         if (layout.nodes.length === 0) {
             console.warn('No nodes to render');
             clearAll();
@@ -711,8 +617,36 @@ const Visualization = (() => {
 
             // Update canvas dimensions based on layout
             const container = document.getElementById('commit-graph');
-            svg.attr('width', Math.max(layout.width, container.clientWidth))
-                .attr('height', Math.max(layout.height, container.clientHeight));
+            const svgW = Math.max(layout.width, container.clientWidth);
+            const svgH = Math.max(layout.height, container.clientHeight);
+            svg.attr('width', svgW).attr('height', svgH);
+
+            // Configure axis scale from layout time range.
+            // For Timeline mode, nodes are positioned in g-space with their own MarginX offset.
+            // The g-group itself has a translate(config.margin.left, ...) transform.
+            // Derive the pixel range from actual node positions + g-transform so axis ticks
+            // land exactly on the nodes that represent those dates.
+            const minTs = layout.minTimestamp ? new Date(layout.minTimestamp) : null;
+            const maxTs = layout.maxTimestamp ? new Date(layout.maxTimestamp) : null;
+            if (minTs && maxTs && !isNaN(minTs) && !isNaN(maxTs)) {
+                if (layout.mode === 'Timeline' &&
+                    layout.timelineOriginX != null && layout.timelinePixelsPerSecond != null) {
+                    // g.attr('transform', currentZoom) at identity zoom = translate(0,0),
+                    // so nodes render at raw node.x values in SVG space.
+                    // Backend: node.x = timelineOriginX + (t - tMin).seconds * pps
+                    // Axis range must use the same origin — do NOT add config.margin.left.
+                    const originX = layout.timelineOriginX;
+                    const spanSec = (maxTs - minTs) / 1000;
+                    const totalPx = spanSec * layout.timelinePixelsPerSecond;
+                    axisScale = d3.scaleTime()
+                        .domain([minTs, maxTs])
+                        .range([originX, originX + totalPx]);
+                } else {
+                    axisScale = d3.scaleTime()
+                        .domain([minTs, maxTs])
+                        .range([config.margin.left, svgW - config.margin.right]);
+                }
+            }
 
             // Render based on layout mode
             if (layout.mode === 'Calendar') {
@@ -721,9 +655,12 @@ const Visualization = (() => {
                 renderLogicalLayout(layout);
             }
 
-            // Restore zoom state after rendering
-            if (currentZoom && currentZoom.k !== 1) {
-                g.attr('transform', currentZoom);
+            // Apply zoom transform; render axis for Timeline and Calendar modes
+            g.attr('transform', currentZoom);
+            if (layout.mode === 'Timeline' || layout.mode === 'Calendar') {
+                renderTimelineAxis();
+            } else if (axisG) {
+                axisG.selectAll('*').remove();
             }
 
             console.log('=== renderLayout COMPLETE ===');
@@ -748,33 +685,29 @@ const Visualization = (() => {
             .data(layout.edges)
             .enter()
             .append('g')
-            .attr('class', d => `edge edge-${d.type.toLowerCase()}`);
+            .attr('class', d => `edge edge-${d.type.toLowerCase()}${d.isLongSpan ? ' edge-longspan' : ''}`);
 
         edgeGroups.each(function (d) {
             const edge = d3.select(this);
 
             if (d.x1 !== undefined) {
                 edge.append('line')
+                    .attr('class', 'edge-line')
                     .attr('x1', d.x1)
                     .attr('y1', d.y1)
                     .attr('x2', d.x2)
-                    .attr('y2', d.y2)
-                    .attr('stroke', getEdgeColor(d.type))
-                    .attr('stroke-width', getEdgeWidth(d.type))
-                    .attr('stroke-dasharray', getEdgeDashArray(d.type))
-                    .attr('opacity', 0)
-                    .transition()
-                    .duration(500)
-                    .attr('opacity', getEdgeOpacity(d.type));
+                    .attr('y2', d.y2);
             }
         });
+        setTimeout(() => edgeGroups.selectAll('.edge-line').classed('is-visible', true), 0);
 
-        // Render nodes (commits)
+        // Render nodes (commits) — exclude ghost/shadow-ref nodes (invisible anchors)
         const nodeGroups = g.selectAll('.commit-node')
-            .data(layout.nodes)
+            .data(layout.nodes.filter(n => !n.isGhost))
             .enter()
             .append('g')
-            .attr('class', d => `commit-node ${d.isSignificant ? 'significant' : 'normal'}`)
+            .attr('class', d => `commit-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branchName)}`)
+            .attr('data-commit-id', d => d.commitId)
             .attr('transform', d => `translate(${d.x}, ${d.y})`)
             .on('click', (event, d) => showNodeDetail(d))
             .on('mouseenter', handleNodeHover)
@@ -782,12 +715,10 @@ const Visualization = (() => {
 
         nodeGroups.append('circle')
             .attr('r', 0)
-            .attr('fill', d => getNodeColor(d))
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', d => d.isSignificant ? 1.5 : 1)
             .transition()
             .duration(500)
             .attr('r', d => d.radius);
+        setTimeout(() => g.selectAll('.commit-node').classed('is-visible', true), 0);
 
         console.log('Logical layout rendered');
     }
@@ -807,96 +738,396 @@ const Visualization = (() => {
             .on('mouseenter', handleCalendarNodeHover)
             .on('mouseleave', handleCalendarNodeUnhover);
 
-        // Render as circles (size proportional to commit count)
         nodeGroups.append('circle')
             .attr('r', 0)
-            .attr('fill', '#4a90e2')
-            .attr('stroke', config.colors.commitDefault)
-            .attr('stroke-width', 1.5)
-            .attr('opacity', 0.7)
             .transition()
             .duration(500)
             .attr('r', d => d.radius);
 
-        // Add count labels for significant groups
         nodeGroups.filter(d => d.radius > 8)
             .append('text')
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle')
-            .attr('font-size', '10px')
-            .attr('font-weight', 'bold')
-            .attr('fill', '#fff')
-            .attr('pointer-events', 'none')
             .text(d => {
-                // Extract commit count from message (hacky but works for MVP)
                 const match = d.message.match(/(\d+) commits?/);
                 return match ? match[1] : '';
-            })
-            .attr('opacity', 0)
-            .transition()
-            .duration(500)
-            .attr('opacity', 1);
-
-        // Add time axis
-        renderCalendarTimeAxis(layout);
+            });
+        setTimeout(() => g.selectAll('.calendar-node').classed('is-visible', true), 0);
 
         console.log('Calendar layout rendered');
     }
 
-    function renderCalendarTimeAxis(layout) {
-        const axisGroup = g.append('g').attr('class', 'calendar-axis');
+    function renderTimelineAxis() {
+        if (!axisG) return;
 
-        // Extract unique time labels from nodes
-        const timeLabels = new Map();
-        layout.nodes.forEach(node => {
-            if (node.message) {
-                // Extract period label (e.g., "2024-04" from message)
-                const match = node.message.match(/^([\d-]+)/);
-                if (match) {
-                    const label = match[1];
-                    if (!timeLabels.has(label)) {
-                        timeLabels.set(label, node.x);
+        // Calendar mode: ticks are anchored to node positions, not a continuous time scale
+        if (currentLayout?.mode === 'Calendar') {
+            renderCalendarAxis();
+            return;
+        }
+
+        if (!axisScale) return;
+
+        axisG.selectAll('*').remove();
+
+        const svgW = parseFloat(svg.attr('width')) || 1200;
+        const svgH = parseFloat(svg.attr('height')) || 600;
+
+        const k = currentZoom.k;
+        const rescaledX = currentZoom.rescaleX(axisScale);
+
+        // Visible date range in current viewport
+        const visibleMin = rescaledX.invert(0);
+        const visibleMax = rescaledX.invert(svgW);
+
+        // Tier rows stacked top-to-bottom inside config.margin.top (60px) space.
+        // labelY = SVG text baseline; grid lines span full SVG height.
+        // Use UTC variants so tick positions match the UTC-based timestamps from the backend.
+        const tiers = [
+            { name: 'year', interval: d3.utcYear, labelFn: d => d.getUTCFullYear(), labelY: 14, minK: 0 },
+            { name: 'month', interval: d3.utcMonth, labelFn: d => d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }), labelY: 30, minK: 0.3 },
+            { name: 'week', interval: d3.utcWeek, labelFn: d => d.getUTCDate(), labelY: 44, minK: 1.0 },
+            { name: 'day', interval: d3.utcDay, labelFn: d => d.getUTCDate(), labelY: 56, minK: 3.0 },
+        ];
+
+        tiers.forEach(({ name, interval, labelFn, labelY, minK }) => {
+            if (k < minK) return;
+
+            const ticks = interval.range(
+                interval.floor(visibleMin),
+                interval.ceil(visibleMax)
+            );
+
+            // Minimum pixel gap between labels of the same tier to prevent overlap
+            const minGap = name === 'year' ? 60 : name === 'month' ? 36 : 28;
+            let lastLabelX = -Infinity;
+
+            ticks.forEach(date => {
+                const x = rescaledX(date);
+                if (x < -50 || x > svgW + 50) return;
+
+                // Draw the grid line first (always)
+                axisG.append('line')
+                    .attr('class', `timeline-grid-line--${name}`)
+                    .attr('x1', x).attr('y1', 0)
+                    .attr('x2', x).attr('y2', svgH);
+
+                // Skip label if it would overlap the previous one
+                if (x - lastLabelX < minGap) return;
+                lastLabelX = x;
+
+                axisG.append('text')
+                    .attr('class', `timeline-label--${name}`)
+                    .attr('x', x + 3).attr('y', labelY)
+                    .text(labelFn(date));
+            });
+        });
+
+        // Baseline separator at the bottom of the axis band
+        axisG.append('line')
+            .attr('class', 'timeline-axis-baseline')
+            .attr('x1', 0).attr('y1', config.margin.top - 2)
+            .attr('x2', svgW).attr('y2', config.margin.top - 2);
+    }
+
+    function renderCalendarAxis() {
+        if (!axisG || !currentLayout?.nodes?.length) return;
+        if (!currentLayout.minTimestamp || !currentLayout.maxTimestamp) return;
+
+        axisG.selectAll('*').remove();
+
+        const svgW = parseFloat(svg.attr('width')) || 1200;
+        const svgH = parseFloat(svg.attr('height')) || 600;
+
+        const marginX = 50;
+        const colW = currentLayout.calendarColumnWidthPx; // null for year granularity
+        const nodes = currentLayout.nodes.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const minTs = new Date(currentLayout.minTimestamp);
+        const maxTs = new Date(currentLayout.maxTimestamp);
+
+        // --- column-based axis (month / week / day) ---
+        if (colW) {
+            const gran = (currentLayout.calendarGranularity || 'Month').toLowerCase();
+
+            // Helper: ISO week number (1-53)
+            function isoWeekNumber(date) {
+                const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+                const dayNum = d.getUTCDay() || 7;
+                d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+                const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+                return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            }
+
+            if (gran === 'week') {
+                // --- WEEK axis  (3 tiers: year → month → week number) ---
+                // All positions: gX = marginX + (date - minTs) / (7 days) * colW
+                const MS_PER_WEEK = 7 * 24 * 3600 * 1000;
+                function dateToGX(date) {
+                    return marginX + ((date - minTs) / MS_PER_WEEK) * colW;
+                }
+                function dateToSvgX(date) {
+                    return currentZoom.applyX(dateToGX(date));
+                }
+
+                const colWidthSvgPx = colW * currentZoom.k;
+                const firstYear = minTs.getFullYear();
+                const lastYear  = maxTs.getFullYear();
+
+                // Tier 1 — Year labels (y=14) + heavy year lines
+                let lastYearLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear + 1; y++) {
+                    const svgX = dateToSvgX(new Date(y, 0, 1));
+                    if (svgX < -50 || svgX > svgW + 50) continue;
+                    axisG.append('line')
+                        .attr('class', 'timeline-grid-line--year')
+                        .attr('x1', svgX).attr('y1', 0)
+                        .attr('x2', svgX).attr('y2', svgH);
+                    if (svgX - lastYearLabelX >= 40) {
+                        axisG.append('text')
+                            .attr('class', 'timeline-label--year')
+                            .attr('x', svgX + 3).attr('y', 14)
+                            .text(y);
+                        lastYearLabelX = svgX;
                     }
                 }
+
+                // Tier 2 — Month labels (y=30) + lighter month lines
+                let lastMonthLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear; y++) {
+                    for (let m = 0; m < 12; m++) {
+                        const monthStart = new Date(y, m, 1);
+                        const svgX = dateToSvgX(monthStart);
+                        if (svgX < -50 || svgX > svgW + 50) continue;
+                        if (m > 0) { // Jan already covered by year line
+                            axisG.append('line')
+                                .attr('class', 'timeline-grid-line--month')
+                                .attr('x1', svgX).attr('y1', 0)
+                                .attr('x2', svgX).attr('y2', svgH);
+                        }
+                        if (svgX - lastMonthLabelX >= 24) {
+                            axisG.append('text')
+                                .attr('class', 'timeline-label--month')
+                                .attr('x', svgX + 3).attr('y', 30)
+                                .text(monthStart.toLocaleDateString('en-US', { month: 'short' }));
+                            lastMonthLabelX = svgX;
+                        }
+                    }
+                }
+
+                // Tier 3 — Week-number labels (y=46) for ALL weeks in range
+                const fmtDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                let lastWeekLabelX = -Infinity;
+                const cursor = new Date(minTs); // minTs is always Monday (from backend)
+                while (cursor <= maxTs) {
+                    const svgX = dateToSvgX(cursor);
+                    if (svgX >= -50 && svgX <= svgW + 50) {
+                        const wn = isoWeekNumber(cursor);
+                        const monday = new Date(cursor);
+                        const sunday = new Date(cursor);
+                        sunday.setDate(sunday.getDate() + 6);
+
+                        const labelX = svgX + colWidthSvgPx / 2;
+                        if (colWidthSvgPx >= 10 && labelX - lastWeekLabelX >= colWidthSvgPx * 0.85) {
+                            const t = axisG.append('text')
+                                .attr('class', 'timeline-label--week')
+                                .attr('x', labelX)
+                                .attr('y', 46)
+                                .attr('text-anchor', 'middle')
+                                .text(wn);
+                            t.append('title')
+                                .text(`Week ${wn}, ${fmtDate(monday)} – ${fmtDate(sunday)}`);
+                            lastWeekLabelX = labelX;
+                        }
+                    }
+                    cursor.setDate(cursor.getDate() + 7);
+                }
+
+            } else if (gran === 'day') {
+                // --- DAY axis  (3 tiers: year → month → day-of-month) ---
+                const MS_PER_DAY = 24 * 3600 * 1000;
+                function dateToDayGX(date) {
+                    return marginX + ((date - minTs) / MS_PER_DAY) * colW;
+                }
+                function dateToDaySvgX(date) {
+                    return currentZoom.applyX(dateToDayGX(date));
+                }
+
+                const colWidthSvgPx = colW * currentZoom.k;
+                const firstYear = minTs.getFullYear();
+                const lastYear  = maxTs.getFullYear();
+
+                // Tier 1 — Year labels (y=14) + heavy year lines
+                let lastYearLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear + 1; y++) {
+                    const svgX = dateToDaySvgX(new Date(y, 0, 1));
+                    if (svgX < -50 || svgX > svgW + 50) continue;
+                    axisG.append('line')
+                        .attr('class', 'timeline-grid-line--year')
+                        .attr('x1', svgX).attr('y1', 0)
+                        .attr('x2', svgX).attr('y2', svgH);
+                    if (svgX - lastYearLabelX >= 40) {
+                        axisG.append('text')
+                            .attr('class', 'timeline-label--year')
+                            .attr('x', svgX + 3).attr('y', 14)
+                            .text(y);
+                        lastYearLabelX = svgX;
+                    }
+                }
+
+                // Tier 2 — Month labels (y=30) + lighter month lines
+                let lastMonthLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear; y++) {
+                    for (let m = 0; m < 12; m++) {
+                        const monthStart = new Date(y, m, 1);
+                        const svgX = dateToDaySvgX(monthStart);
+                        if (svgX < -50 || svgX > svgW + 50) continue;
+                        if (m > 0) {
+                            axisG.append('line')
+                                .attr('class', 'timeline-grid-line--month')
+                                .attr('x1', svgX).attr('y1', 0)
+                                .attr('x2', svgX).attr('y2', svgH);
+                        }
+                        if (svgX - lastMonthLabelX >= 24) {
+                            axisG.append('text')
+                                .attr('class', 'timeline-label--month')
+                                .attr('x', svgX + 3).attr('y', 30)
+                                .text(monthStart.toLocaleDateString('en-US', { month: 'short' }));
+                            lastMonthLabelX = svgX;
+                        }
+                    }
+                }
+
+                // Tier 3 — Day-of-month labels (y=46) for every calendar day in range
+                const fmtFull = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                let lastDayLabelX = -Infinity;
+                const cursor = new Date(minTs.getFullYear(), minTs.getMonth(), minTs.getDate());
+                const endDate = new Date(maxTs.getFullYear(), maxTs.getMonth(), maxTs.getDate());
+                while (cursor <= endDate) {
+                    const svgX = dateToDaySvgX(cursor);
+                    if (svgX >= -50 && svgX <= svgW + 50) {
+                        const day = cursor.getDate();
+                        const labelX = svgX + colWidthSvgPx / 2;
+                        if (colWidthSvgPx >= 8 && labelX - lastDayLabelX >= colWidthSvgPx * 0.85) {
+                            const t = axisG.append('text')
+                                .attr('class', 'timeline-label--week') // reuse same style as week numbers
+                                .attr('x', labelX)
+                                .attr('y', 46)
+                                .attr('text-anchor', 'middle')
+                                .text(day);
+                            t.append('title').text(fmtFull(cursor));
+                            lastDayLabelX = labelX;
+                        }
+                    }
+                    cursor.setDate(cursor.getDate() + 1);
+                }
+
+            } else {
+                // --- MONTH axis (existing logic) ---
+                const firstYear   = minTs.getFullYear();
+                const firstMonth0 = minTs.getMonth();
+                const lastYear    = maxTs.getFullYear();
+                const lastMonth0  = maxTs.getMonth();
+
+                function colToSvgX(colIdx) {
+                    return currentZoom.applyX(marginX + colIdx * colW);
+                }
+
+                let lastYearLabelX  = -Infinity;
+                const colWidthSvgPx = colW * currentZoom.k;
+
+                for (let y = firstYear; y <= lastYear; y++) {
+                    const mStart = (y === firstYear) ? firstMonth0 : 0;
+                    const mEnd   = (y === lastYear)  ? lastMonth0  : 11;
+                    for (let m = mStart; m <= mEnd; m++) {
+                        const colIdx = (y - firstYear) * 12 + m - firstMonth0;
+                        const svgX   = colToSvgX(colIdx);
+                        if (svgX < -50 || svgX > svgW + 50) continue;
+
+                        const isJan = m === 0;
+                        axisG.append('line')
+                            .attr('class', isJan ? 'timeline-grid-line--year' : 'timeline-grid-line--month')
+                            .attr('x1', svgX).attr('y1', 0)
+                            .attr('x2', svgX).attr('y2', svgH);
+
+                        if (isJan && svgX - lastYearLabelX >= 40) {
+                            axisG.append('text')
+                                .attr('class', 'timeline-label--year')
+                                .attr('x', svgX + 3).attr('y', 45)
+                                .text(y);
+                            lastYearLabelX = svgX;
+                        }
+                    }
+                }
+
+                // Right-edge closing line
+                const totalCols = (lastYear - firstYear) * 12 + lastMonth0 - firstMonth0 + 1;
+                const closeX = colToSvgX(totalCols);
+                if (closeX >= -50 && closeX <= svgW + 50) {
+                    axisG.append('line')
+                        .attr('class', 'timeline-grid-line--year')
+                        .attr('x1', closeX).attr('y1', 0)
+                        .attr('x2', closeX).attr('y2', svgH);
+                }
+
+                // Month name labels at active nodes
+                if (colWidthSvgPx >= 18) {
+                    nodes.forEach(node => {
+                        const svgX = currentZoom.applyX(node.x);
+                        if (svgX < -50 || svgX > svgW + 50) return;
+                        const label = new Date(node.timestamp).toLocaleDateString('en-US', { month: 'short' });
+                        axisG.append('text')
+                            .attr('class', 'timeline-label--month')
+                            .attr('x', svgX)
+                            .attr('y', 20)
+                            .attr('text-anchor', 'middle')
+                            .text(label);
+                    });
+                }
             }
-        });
 
-        // Draw labels
-        timeLabels.forEach((x, label) => {
-            axisGroup.append('text')
-                .attr('x', x)
-                .attr('y', -20)
-                .attr('text-anchor', 'middle')
-                .attr('font-size', '11px')
-                .attr('font-weight', 'bold')
-                .attr('fill', config.colors.commitDefault)
-                .text(label);
+        } else {
+            // --- proportional time-based axis (year granularity) ---
+            const usableWidth = currentLayout.width - 2 * marginX;
+            const totalSpanMs = maxTs - minTs;
 
-            // Draw tick mark
-            axisGroup.append('line')
-                .attr('x1', x)
-                .attr('y1', -10)
-                .attr('x2', x)
-                .attr('y2', layout.height - config.margin.top - config.margin.bottom)
-                .attr('stroke', '#d0d0d0')
-                .attr('stroke-width', 1)
-                .attr('opacity', 0.4);
-        });
+            function calendarDateToSvgX(date) {
+                const gX = marginX + ((date - minTs) / totalSpanMs) * usableWidth;
+                return currentZoom.applyX(gX);
+            }
+
+            const firstYear = minTs.getFullYear();
+            const lastYear  = maxTs.getFullYear();
+            let lastYearLabelX = -Infinity;
+
+            for (let y = firstYear; y <= lastYear + 1; y++) {
+                const svgX = calendarDateToSvgX(new Date(y, 0, 1));
+                if (svgX < -50 || svgX > svgW + 50) continue;
+
+                axisG.append('line')
+                    .attr('class', 'timeline-grid-line--year')
+                    .attr('x1', svgX).attr('y1', 0)
+                    .attr('x2', svgX).attr('y2', svgH);
+
+                if (svgX - lastYearLabelX >= 40) {
+                    axisG.append('text')
+                        .attr('class', 'timeline-label--year')
+                        .attr('x', svgX + 3).attr('y', 50)
+                        .text(y);
+                    lastYearLabelX = svgX;
+                }
+            }
+        }
+
+        // Baseline separator
+        axisG.append('line')
+            .attr('class', 'timeline-axis-baseline')
+            .attr('x1', 0).attr('y1', config.margin.top - 2)
+            .attr('x2', svgW).attr('y2', config.margin.top - 2);
     }
 
     function showCalendarNodeDetail(node) {
-        // Show period detail
-        if (window.LaniusApp && window.LaniusApp.showCommitDetail) {
-            const commit = {
-                sha: node.commitId || 'calendar-group',
-                author: 'Calendar Group',
-                authorEmail: '',
-                timestamp: node.timestamp,
-                message: node.message || 'Time period group',
-                branches: [node.branchName || 'All branches'],
-                stats: null
-            };
-            window.LaniusApp.showCommitDetail(commit);
+        if (window.LaniusApp && window.LaniusApp.showCalendarGroupDetail) {
+            window.LaniusApp.showCalendarGroupDetail(node);
         }
     }
 
@@ -907,10 +1138,8 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius * 1.3)
-            .attr('stroke-width', 3);
+            .attr('r', d.radius * 1.3);
 
-        // Show tooltip
         showCalendarNodeTooltip(event, d);
     }
 
@@ -921,8 +1150,7 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius)
-            .attr('stroke-width', 1.5);
+            .attr('r', d.radius);
 
         hideTooltip();
     }
@@ -931,27 +1159,15 @@ const Visualization = (() => {
         const tooltip = d3.select('body')
             .append('div')
             .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('background', '#fafafa')
-            .style('border', '1px solid #1a1a1a')
-            .style('padding', '8px')
-            .style('font-family', 'var(--font-mono)')
-            .style('font-size', '11px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('opacity', 0);
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px');
 
         tooltip.html(`
             <div><strong>${node.message || 'Calendar Group'}</strong></div>
-            <div>${new Date(node.timestamp).toLocaleDateString()}</div>
+            <div>${new Date(node.timestamp).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
         `);
 
-        tooltip
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 15) + 'px')
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
+        setTimeout(() => tooltip.classed('is-visible', true), 0);
     }
 
     function extractBranchInfo(nodes) {
@@ -983,129 +1199,44 @@ const Visualization = (() => {
             const lineStartX = info.minX - 20;
             const lineEndX = info.maxX + 50;
 
-            branchGroup.append('line')
+            const branchLine = branchGroup.append('line')
                 .attr('class', 'branch-line')
                 .attr('x1', lineStartX)
                 .attr('y1', info.y)
                 .attr('x2', lineEndX)
-                .attr('y2', info.y)
-                .attr('stroke', config.colors.branchLine)
-                .attr('stroke-width', config.lineWidth)
-                .attr('opacity', 0)
-                .transition()
-                .duration(500)
-                .attr('opacity', 0.3);
+                .attr('y2', info.y);
+            setTimeout(() => branchLine.classed('is-visible', true), 0);
 
-            // Branch indicator box
             const boxSize = 8;
             const boxX = lineStartX - 15;
             const fullName = branchName.replace(/^origin\//, '');
 
             const indicator = branchGroup.append('rect')
-                .attr('class', 'branch-indicator')
+                .attr('class', `branch-indicator ${getBranchClass(branchName)}`)
                 .attr('x', boxX)
                 .attr('y', info.y - boxSize / 2)
                 .attr('width', boxSize)
                 .attr('height', boxSize)
-                .attr('fill', getBranchColor(branchName, info.index))
-                .attr('stroke', config.colors.commitDefault)
-                .attr('stroke-width', 1)
-                .attr('rx', 1)
-                .style('cursor', 'help')
-                .attr('opacity', 0);
+                .attr('rx', 1);
 
-            // Add tooltip
             indicator.append('title').text(fullName);
-
-            // Hover effects
-            indicator.on('mouseenter', function () {
-                d3.select(this)
-                    .transition().duration(200)
-                    .attr('opacity', 1)
-                    .attr('stroke-width', 2);
-            }).on('mouseleave', function () {
-                d3.select(this)
-                    .transition().duration(200)
-                    .attr('opacity', 0.8)
-                    .attr('stroke-width', 1);
-            });
-
-            // Fade in
-            indicator.transition().duration(500).attr('opacity', 0.8);
+            setTimeout(() => indicator.classed('is-visible', true), 0);
         });
     }
 
-    function getEdgeColor(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-                return '#4CAF50'; // Green for branch splits
-            case 'Merge':
-                return '#FF9800'; // Orange for merges
-            case 'Normal':
-            default:
-                return config.colors.link; // Gray for normal connections
-        }
-    }
-
-    function getEdgeWidth(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-            case 'Merge':
-                return 2;
-            case 'Normal':
-            default:
-                return config.lineWidth;
-        }
-    }
-
-    function getEdgeDashArray(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-                return '5,5'; // Dashed for branches
-            case 'Merge':
-                return '3,3'; // Dashed for merges
-            case 'Normal':
-            default:
-                return null; // Solid for normal
-        }
-    }
-
-    function getEdgeOpacity(edgeType) {
-        switch (edgeType) {
-            case 'Branch':
-            case 'Merge':
-                return 0.7;
-            case 'Normal':
-            default:
-                return 0.4;
-        }
-    }
-
-    function getNodeColor(node) {
-        // Color based on branch
-        if (node.branchName === 'main' || node.branchName === 'master') {
-            return '#2d2d2d'; // Dark for main
-        } else if (node.branchName.includes('release')) {
-            return '#4a90e2'; // Blue for releases
-        } else if (node.branchName.includes('feature')) {
-            return '#7ed321'; // Green for features
-        } else if (node.branchName.includes('hotfix') || node.branchName.includes('fix')) {
-            return '#e74c3c'; // Red for fixes
-        }
-        return config.colors.commitDefault;
-    }
-
     function showNodeDetail(node) {
-        // Show commit detail popup
         if (window.LaniusApp && window.LaniusApp.showCommitDetail) {
-            // Map node data to commit structure
             const commit = {
                 sha: node.commitId,
                 author: node.author || 'Unknown',
-                authorEmail: '',
+                authorEmail: node.authorEmail || '',
                 timestamp: node.timestamp,
-                message: node.message || 'No message',
+                committer: node.committer || '',
+                committerEmail: node.committerEmail || '',
+                committerTimestamp: node.committerTimestamp || node.timestamp,
+                message: node.message || '',
                 branches: [node.branchName],
+                parentShas: node.parentShas || [],
                 stats: null
             };
             window.LaniusApp.showCommitDetail(commit);
@@ -1119,10 +1250,8 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius * 1.5)
-            .attr('stroke-width', 2);
+            .attr('r', d.radius * 1.5);
 
-        // Show tooltip
         showNodeTooltip(event, d);
     }
 
@@ -1133,8 +1262,7 @@ const Visualization = (() => {
             .transition()
             .duration(200)
             .ease(d3.easeCubicOut)
-            .attr('r', d.radius)
-            .attr('stroke-width', d.isSignificant ? 1.5 : 1);
+            .attr('r', d.radius);
 
         hideTooltip();
     }
@@ -1143,30 +1271,89 @@ const Visualization = (() => {
         const tooltip = d3.select('body')
             .append('div')
             .attr('class', 'tooltip')
-            .style('position', 'absolute')
-            .style('background', '#fafafa')
-            .style('border', '1px solid #1a1a1a')
-            .style('padding', '8px')
-            .style('font-family', 'var(--font-mono)')
-            .style('font-size', '11px')
-            .style('pointer-events', 'none')
-            .style('z-index', '1000')
-            .style('opacity', 0);
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 15) + 'px');
 
         tooltip.html(`
             <div><strong>${node.message || 'Commit'}</strong></div>
             <div>${node.author || 'Unknown author'}</div>
             <div>${new Date(node.timestamp).toLocaleDateString()}</div>
             <div>Branch: ${node.branchName}</div>
-            ${node.isSignificant ? '<div style="color: #2196F3;">Significant commit</div>' : ''}
+            ${node.isSignificant ? '<div class="tooltip-significant">Significant commit</div>' : ''}
         `);
 
-        tooltip
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 15) + 'px')
-            .transition()
-            .duration(200)
-            .style('opacity', 1);
+        setTimeout(() => tooltip.classed('is-visible', true), 0);
+    }
+
+    // Replay mode functions
+    function startReplayMode() {
+        // Hide all commit nodes; they will be revealed one-by-one via revealCommit()
+        g.selectAll('.commit-node').classed('replay-hidden', true);
+    }
+
+    function stopReplayMode() {
+        g.selectAll('.commit-node').classed('replay-hidden', false);
+    }
+
+    function revealCommit(sha) {
+        g.selectAll('.commit-node')
+            .filter(function () { return d3.select(this).attr('data-commit-id') === sha; })
+            .classed('replay-hidden', false);
+
+        scrollToCommit(sha);
+    }
+
+    function revealRange(shas) {
+        const shaSet = new Set(shas);
+        g.selectAll('.commit-node')
+            .filter(function () { return shaSet.has(d3.select(this).attr('data-commit-id')); })
+            .classed('replay-hidden', false);
+    }
+
+    function scrollToCommit(sha) {
+        if (!currentLayout || !svg || !zoomBehavior) return;
+
+        const node = currentLayout.nodes.find(n => n.commitId === sha);
+        if (!node) return;
+
+        const svgEl = document.getElementById('commit-graph');
+        const container = svgEl.parentElement;
+        container.scrollLeft = 0;
+
+        const viewW = container.clientWidth || 1200;
+        const viewH = container.clientHeight || 600;
+        const k = currentZoom.k;
+
+        const newTx = viewW / 2 - k * node.x;
+        const newTy = viewH / 2 - k * node.y;
+        const newTransform = d3.zoomIdentity.translate(newTx, newTy).scale(k);
+
+        svg.transition()
+            .duration(400)
+            .ease(d3.easeCubicOut)
+            .call(zoomBehavior.transform, newTransform);
+    }
+
+    function jumpToCommit(sha) {
+        if (!currentLayout || !svg || !zoomBehavior) return;
+
+        const node = currentLayout.nodes.find(n => n.commitId === sha);
+        if (!node) return;
+
+        const svgEl = document.getElementById('commit-graph');
+        const container = svgEl.parentElement;
+        container.scrollLeft = 0;
+
+        const viewW = container.clientWidth || 1200;
+        const viewH = container.clientHeight || 600;
+        const k = currentZoom.k;
+
+        const newTx = viewW / 2 - k * node.x;
+        const newTy = viewH / 2 - k * node.y;
+        const newTransform = d3.zoomIdentity.translate(newTx, newTy).scale(k);
+
+        // Apply immediately (no transition) — used after seek to override any in-flight scrolls
+        svg.call(zoomBehavior.transform, newTransform);
     }
 
     // Zoom control functions
@@ -1203,7 +1390,13 @@ const Visualization = (() => {
         clear: clearAll,
         resetZoom,
         zoomIn,
-        zoomOut
+        zoomOut,
+        startReplayMode,
+        stopReplayMode,
+        revealCommit,
+        revealRange,
+        scrollToCommit,
+        jumpToCommit
     };
 })();
 

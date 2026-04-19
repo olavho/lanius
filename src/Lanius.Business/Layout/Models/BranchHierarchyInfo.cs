@@ -26,6 +26,11 @@ public record BranchHierarchyInfo
     public string? MergeBaseSha { get; init; }
 
     /// <summary>
+    /// Timestamp of the merge base commit (when this branch split from its parent)
+    /// </summary>
+    public DateTimeOffset? SplitTimestamp { get; init; }
+
+    /// <summary>
     /// Number of commits on this branch since merge base
     /// </summary>
     public int CommitCount { get; init; }

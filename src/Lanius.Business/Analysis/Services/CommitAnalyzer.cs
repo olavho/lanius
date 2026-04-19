@@ -78,7 +78,7 @@ public class CommitAnalyzer(
             IReadOnlyList<DomainCommit> result;
             if (progress == null)
             {
-                result = commits.Select(MapCommitFast).ToList();
+                result = [.. commits.Select(MapCommitFast)];
             }
             else
             {
@@ -134,6 +134,9 @@ public class CommitAnalyzer(
             Author = gitCommit.Author.Name,
             AuthorEmail = gitCommit.Author.Email,
             Timestamp = gitCommit.Author.When,
+            Committer = gitCommit.Committer.Name,
+            CommitterEmail = gitCommit.Committer.Email,
+            CommitterTimestamp = gitCommit.Committer.When,
             Message = gitCommit.Message,
             ParentShas = [.. gitCommit.Parents.Select(p => p.Sha)],
             Stats = stats,
@@ -169,6 +172,9 @@ public class CommitAnalyzer(
             Author = gitCommit.Author.Name,
             AuthorEmail = gitCommit.Author.Email,
             Timestamp = gitCommit.Author.When,
+            Committer = gitCommit.Committer.Name,
+            CommitterEmail = gitCommit.Committer.Email,
+            CommitterTimestamp = gitCommit.Committer.When,
             Message = gitCommit.Message,
             ParentShas = [.. gitCommit.Parents.Select(p => p.Sha)],
             Stats = stats,
@@ -267,7 +273,7 @@ public class CommitAnalyzer(
         return result;
     }
 
-    private IReadOnlyList<DomainCommit> GetCommitsSinceInternal(
+    private List<DomainCommit> GetCommitsSinceInternal(
         Repository repo,
         string branchName,
         string? sinceCommitSha = null)
@@ -295,7 +301,7 @@ public class CommitAnalyzer(
             branchName, sw.ElapsedMilliseconds, commits.Count, sinceCommitSha?[..8] ?? "none");
 
         sw.Restart();
-        var result = commits.Select(c => MapCommitFast(c, branchName)).ToList() as IReadOnlyList<DomainCommit>;
+        var result = commits.Select(c => MapCommitFast(c, branchName)).ToList();
         logger.LogInformation("[PERF] Map {BranchName}: {ElapsedMs}ms ({CommitCount} commits)",
             branchName, sw.ElapsedMilliseconds, result.Count);
 

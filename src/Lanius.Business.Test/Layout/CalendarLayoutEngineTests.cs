@@ -836,7 +836,7 @@ public class CalendarLayoutEngineTests
 
     #region Helper Methods
 
-    private static IReadOnlyList<Commit> GenerateCommits(int count, DateTimeOffset start, TimeSpan totalSpan)
+    private static List<Commit> GenerateCommits(int count, DateTimeOffset start, TimeSpan totalSpan)
     {
         var commits = new List<Commit>(count);
         var intervalTicks = count > 1 ? totalSpan.Ticks / (count - 1) : 0;
@@ -855,6 +855,9 @@ public class CalendarLayoutEngineTests
             Message = $"Commit {sha}",
             Author = "Test Author",
             AuthorEmail = "test@example.com",
+            Committer = "Test Author",
+            CommitterEmail = "test@example.com",
+            CommitterTimestamp = timestamp,
             Timestamp = timestamp,
             Branches = [.. new List<string> { "origin/main" }],
             ParentShas = [.. new List<string>()]
