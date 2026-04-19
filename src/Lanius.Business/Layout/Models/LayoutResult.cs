@@ -70,4 +70,16 @@ public record LayoutResult
     /// Number of time columns in the grid (equals the highest GridColumn + 1).
     /// </summary>
     public int ColumnCount { get; init; }
+
+    /// <summary>
+    /// Fixed pixel width of each calendar period column (month/week/day granularity).
+    /// Null for year granularity (uses proportional time positioning instead).
+    /// </summary>
+    public double? CalendarColumnWidthPx { get; init; }
+
+    /// <summary>
+    /// Granularity used for calendar layout (Month/Week/Day/Year).
+    /// Null for non-calendar layouts.
+    /// </summary>
+    public CalendarGranularity? Granularity { get; init; }
 }

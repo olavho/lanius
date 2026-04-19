@@ -683,13 +683,13 @@ function handleCommitRevealed(data) {
     if (node) {
         const message = node.message || '';
         document.getElementById('np-message').textContent = message;
-        document.getElementById('np-sha').textContent    = data.sha.substring(0, 8);
+        document.getElementById('np-sha').textContent = data.sha.substring(0, 8);
         document.getElementById('np-branch').textContent = node.branchName || '';
         document.getElementById('np-author').textContent = node.authorEmail
             ? `${node.author} <${node.authorEmail}>`
             : node.author || 'Unknown';
-        document.getElementById('np-author-date').textContent    = formatIsoDate(node.timestamp);
-        document.getElementById('np-committer').textContent      = node.committerEmail
+        document.getElementById('np-author-date').textContent = formatIsoDate(node.timestamp);
+        document.getElementById('np-committer').textContent = node.committerEmail
             ? `${node.committer} <${node.committerEmail}>`
             : node.committer || '';
         document.getElementById('np-committer-date').textContent = formatIsoDate(node.committerTimestamp);

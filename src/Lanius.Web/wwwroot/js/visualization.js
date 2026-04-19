@@ -655,9 +655,9 @@ const Visualization = (() => {
                 renderLogicalLayout(layout);
             }
 
-            // Apply zoom transform; axis is only meaningful for Timeline mode
+            // Apply zoom transform; render axis for Timeline and Calendar modes
             g.attr('transform', currentZoom);
-            if (layout.mode === 'Timeline') {
+            if (layout.mode === 'Timeline' || layout.mode === 'Calendar') {
                 renderTimelineAxis();
             } else if (axisG) {
                 axisG.selectAll('*').remove();
@@ -832,66 +832,218 @@ const Visualization = (() => {
 
     function renderCalendarAxis() {
         if (!axisG || !currentLayout?.nodes?.length) return;
+        if (!currentLayout.minTimestamp || !currentLayout.maxTimestamp) return;
 
         axisG.selectAll('*').remove();
 
         const svgW = parseFloat(svg.attr('width')) || 1200;
         const svgH = parseFloat(svg.attr('height')) || 600;
 
-        const nodes = currentLayout.nodes
-            .slice()
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const marginX = 50;
+        const colW = currentLayout.calendarColumnWidthPx; // null for year granularity
+        const nodes = currentLayout.nodes.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const minTs = new Date(currentLayout.minTimestamp);
+        const maxTs = new Date(currentLayout.maxTimestamp);
 
-        // Infer granularity from median spacing between adjacent node timestamps
-        let granularity = 'month';
-        if (nodes.length >= 2) {
-            const dt = (new Date(nodes[1].timestamp) - new Date(nodes[0].timestamp)) / (1000 * 60 * 60 * 24);
-            if (dt < 2) granularity = 'day';
-            else if (dt < 10) granularity = 'week';
-            else if (dt > 300) granularity = 'year';
+        // --- column-based axis (month / week / day) ---
+        if (colW) {
+            const gran = (currentLayout.calendarGranularity || 'Month').toLowerCase();
+
+            // Helper: ISO week number (1-53)
+            function isoWeekNumber(date) {
+                const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+                const dayNum = d.getUTCDay() || 7;
+                d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+                const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+                return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            }
+
+            if (gran === 'week') {
+                // --- WEEK axis  (3 tiers: year → month → week number) ---
+                // All positions: gX = marginX + (date - minTs) / (7 days) * colW
+                const MS_PER_WEEK = 7 * 24 * 3600 * 1000;
+                function dateToGX(date) {
+                    return marginX + ((date - minTs) / MS_PER_WEEK) * colW;
+                }
+                function dateToSvgX(date) {
+                    return currentZoom.applyX(dateToGX(date));
+                }
+
+                const colWidthSvgPx = colW * currentZoom.k;
+                const firstYear = minTs.getFullYear();
+                const lastYear  = maxTs.getFullYear();
+
+                // Tier 1 — Year labels (y=14) + heavy year lines
+                let lastYearLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear + 1; y++) {
+                    const svgX = dateToSvgX(new Date(y, 0, 1));
+                    if (svgX < -50 || svgX > svgW + 50) continue;
+                    axisG.append('line')
+                        .attr('class', 'timeline-grid-line--year')
+                        .attr('x1', svgX).attr('y1', 0)
+                        .attr('x2', svgX).attr('y2', svgH);
+                    if (svgX - lastYearLabelX >= 40) {
+                        axisG.append('text')
+                            .attr('class', 'timeline-label--year')
+                            .attr('x', svgX + 3).attr('y', 14)
+                            .text(y);
+                        lastYearLabelX = svgX;
+                    }
+                }
+
+                // Tier 2 — Month labels (y=30) + lighter month lines
+                let lastMonthLabelX = -Infinity;
+                for (let y = firstYear; y <= lastYear; y++) {
+                    for (let m = 0; m < 12; m++) {
+                        const monthStart = new Date(y, m, 1);
+                        const svgX = dateToSvgX(monthStart);
+                        if (svgX < -50 || svgX > svgW + 50) continue;
+                        if (m > 0) { // Jan already covered by year line
+                            axisG.append('line')
+                                .attr('class', 'timeline-grid-line--month')
+                                .attr('x1', svgX).attr('y1', 0)
+                                .attr('x2', svgX).attr('y2', svgH);
+                        }
+                        if (svgX - lastMonthLabelX >= 24) {
+                            axisG.append('text')
+                                .attr('class', 'timeline-label--month')
+                                .attr('x', svgX + 3).attr('y', 30)
+                                .text(monthStart.toLocaleDateString('en-US', { month: 'short' }));
+                            lastMonthLabelX = svgX;
+                        }
+                    }
+                }
+
+                // Tier 3 — Week-number labels (y=46) for ALL weeks in range
+                const fmtDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                let lastWeekLabelX = -Infinity;
+                const cursor = new Date(minTs); // minTs is always Monday (from backend)
+                while (cursor <= maxTs) {
+                    const svgX = dateToSvgX(cursor);
+                    if (svgX >= -50 && svgX <= svgW + 50) {
+                        const wn = isoWeekNumber(cursor);
+                        const monday = new Date(cursor);
+                        const sunday = new Date(cursor);
+                        sunday.setDate(sunday.getDate() + 6);
+
+                        const labelX = svgX + colWidthSvgPx / 2;
+                        if (colWidthSvgPx >= 10 && labelX - lastWeekLabelX >= colWidthSvgPx * 0.85) {
+                            const t = axisG.append('text')
+                                .attr('class', 'timeline-label--week')
+                                .attr('x', labelX)
+                                .attr('y', 46)
+                                .attr('text-anchor', 'middle')
+                                .text(wn);
+                            t.append('title')
+                                .text(`Week ${wn}, ${fmtDate(monday)} – ${fmtDate(sunday)}`);
+                            lastWeekLabelX = labelX;
+                        }
+                    }
+                    cursor.setDate(cursor.getDate() + 7);
+                }
+
+            } else {
+                // --- MONTH axis (existing logic) ---
+                const firstYear   = minTs.getFullYear();
+                const firstMonth0 = minTs.getMonth();
+                const lastYear    = maxTs.getFullYear();
+                const lastMonth0  = maxTs.getMonth();
+
+                function colToSvgX(colIdx) {
+                    return currentZoom.applyX(marginX + colIdx * colW);
+                }
+
+                let lastYearLabelX  = -Infinity;
+                const colWidthSvgPx = colW * currentZoom.k;
+
+                for (let y = firstYear; y <= lastYear; y++) {
+                    const mStart = (y === firstYear) ? firstMonth0 : 0;
+                    const mEnd   = (y === lastYear)  ? lastMonth0  : 11;
+                    for (let m = mStart; m <= mEnd; m++) {
+                        const colIdx = (y - firstYear) * 12 + m - firstMonth0;
+                        const svgX   = colToSvgX(colIdx);
+                        if (svgX < -50 || svgX > svgW + 50) continue;
+
+                        const isJan = m === 0;
+                        axisG.append('line')
+                            .attr('class', isJan ? 'timeline-grid-line--year' : 'timeline-grid-line--month')
+                            .attr('x1', svgX).attr('y1', 0)
+                            .attr('x2', svgX).attr('y2', svgH);
+
+                        if (isJan && svgX - lastYearLabelX >= 40) {
+                            axisG.append('text')
+                                .attr('class', 'timeline-label--year')
+                                .attr('x', svgX + 3).attr('y', 45)
+                                .text(y);
+                            lastYearLabelX = svgX;
+                        }
+                    }
+                }
+
+                // Right-edge closing line
+                const totalCols = (lastYear - firstYear) * 12 + lastMonth0 - firstMonth0 + 1;
+                const closeX = colToSvgX(totalCols);
+                if (closeX >= -50 && closeX <= svgW + 50) {
+                    axisG.append('line')
+                        .attr('class', 'timeline-grid-line--year')
+                        .attr('x1', closeX).attr('y1', 0)
+                        .attr('x2', closeX).attr('y2', svgH);
+                }
+
+                // Month name labels at active nodes
+                if (colWidthSvgPx >= 18) {
+                    nodes.forEach(node => {
+                        const svgX = currentZoom.applyX(node.x);
+                        if (svgX < -50 || svgX > svgW + 50) return;
+                        const label = new Date(node.timestamp).toLocaleDateString('en-US', { month: 'short' });
+                        axisG.append('text')
+                            .attr('class', 'timeline-label--month')
+                            .attr('x', svgX)
+                            .attr('y', 20)
+                            .attr('text-anchor', 'middle')
+                            .text(label);
+                    });
+                }
+            }
+
+        } else {
+            // --- proportional time-based axis (year granularity) ---
+            const usableWidth = currentLayout.width - 2 * marginX;
+            const totalSpanMs = maxTs - minTs;
+
+            function calendarDateToSvgX(date) {
+                const gX = marginX + ((date - minTs) / totalSpanMs) * usableWidth;
+                return currentZoom.applyX(gX);
+            }
+
+            const firstYear = minTs.getFullYear();
+            const lastYear  = maxTs.getFullYear();
+            let lastYearLabelX = -Infinity;
+
+            for (let y = firstYear; y <= lastYear + 1; y++) {
+                const svgX = calendarDateToSvgX(new Date(y, 0, 1));
+                if (svgX < -50 || svgX > svgW + 50) continue;
+
+                axisG.append('line')
+                    .attr('class', 'timeline-grid-line--year')
+                    .attr('x1', svgX).attr('y1', 0)
+                    .attr('x2', svgX).attr('y2', svgH);
+
+                if (svgX - lastYearLabelX >= 40) {
+                    axisG.append('text')
+                        .attr('class', 'timeline-label--year')
+                        .attr('x', svgX + 3).attr('y', 50)
+                        .text(y);
+                    lastYearLabelX = svgX;
+                }
+            }
         }
 
-        let lastYear = null;
-
-        nodes.forEach(node => {
-            // Map node g-space X to SVG space using current zoom transform
-            const svgX = currentZoom.applyX(node.x);
-            if (svgX < -50 || svgX > svgW + 50) return;
-
-            const date = new Date(node.timestamp);
-            const year = date.getFullYear();
-            const isNewYear = year !== lastYear;
-
-            const tierName = isNewYear ? 'year' : 'month';
-            const labelY = isNewYear ? 50 : 37;
-
-            axisG.append('line')
-                .attr('class', `timeline-grid-line--${tierName}`)
-                .attr('x1', svgX).attr('y1', 0)
-                .attr('x2', svgX).attr('y2', svgH);
-
-            if (isNewYear) {
-                axisG.append('text')
-                    .attr('class', 'timeline-label--year')
-                    .attr('x', svgX + 3).attr('y', labelY)
-                    .text(year);
-            }
-
-            if (granularity !== 'year') {
-                let label;
-                if (granularity === 'day' || granularity === 'week') {
-                    label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                } else {
-                    label = date.toLocaleDateString('en-US', { month: 'short' });
-                }
-                axisG.append('text')
-                    .attr('class', 'timeline-label--month')
-                    .attr('x', svgX + 3).attr('y', 37)
-                    .text(label);
-            }
-
-            lastYear = year;
-        });
+        // Baseline separator
+        axisG.append('line')
+            .attr('class', 'timeline-axis-baseline')
+            .attr('x1', 0).attr('y1', config.margin.top - 2)
+            .attr('x2', svgW).attr('y2', config.margin.top - 2);
     }
 
     function showCalendarNodeDetail(node) {
@@ -943,7 +1095,7 @@ const Visualization = (() => {
 
         tooltip.html(`
             <div><strong>${node.message || 'Calendar Group'}</strong></div>
-            <div>${new Date(node.timestamp).toLocaleDateString()}</div>
+            <div>${new Date(node.timestamp).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
         `);
 
         setTimeout(() => tooltip.classed('is-visible', true), 0);

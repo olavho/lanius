@@ -1,3 +1,4 @@
+using System.Globalization;
 using Lanius.Business.Analysis.Models;
 using Lanius.Business.Analysis.Services;
 using Lanius.Business.Layout.Models;
@@ -13,8 +14,8 @@ public class CalendarLayoutEngine(
     ICommitAnalyzer commitAnalyzer,
     ILogger<CalendarLayoutEngine> logger) : ILayoutEngine
 {
-    private const int MinRadius = 4;
-    private const int MaxRadius = 20;
+    private const int MinRadius = 8;
+    private const int MaxRadius = 30;
     private const int CenterY = 300; // Single horizontal row
 
     public async Task<LayoutResult> CalculateLayoutAsync(
@@ -74,18 +75,65 @@ public class CalendarLayoutEngine(
 
         progress?.Report(new LayoutProgress(60, "Calculating layout positions...", 0, groups.Count));
 
+        // For sub-year granularities use a fixed column width per period so every
+        // period gets its own clearly visible lane, independent of viewport size.
+        const int columnWidthMonth = 70;
+        const int columnWidthWeek  = 25;
+        const int columnWidthDay   = 20;
+        const int marginX          = 50;
+
+        double? columnWidthPx = granularity switch
+        {
+            CalendarGranularity.Month => columnWidthMonth,
+            CalendarGranularity.Week  => columnWidthWeek,
+            CalendarGranularity.Day   => columnWidthDay,
+            _                         => null  // Year: proportional, use canvas width as-is
+        };
+
+        // Total calendar columns: months use year*12 span; weeks use days/7 span;
+        // day/year fall back to active-group count or viewport width.
+        int effectiveCanvasWidth;
+        if (columnWidthPx.HasValue)
+        {
+            var firstPeriodTs = groups.Min(g => g.PeriodStart);
+            var lastPeriodTs  = groups.Max(g => g.PeriodStart);
+            var totalColumns  = granularity switch
+            {
+                CalendarGranularity.Month =>
+                    (lastPeriodTs.Year - firstPeriodTs.Year) * 12
+                    + (lastPeriodTs.Month - firstPeriodTs.Month) + 1,
+                CalendarGranularity.Week =>
+                    (int)Math.Round((lastPeriodTs - firstPeriodTs).TotalDays / 7) + 1,
+                _ => groups.Count
+            };
+            effectiveCanvasWidth = (int)(2 * marginX + totalColumns * columnWidthPx.Value);
+        }
+        else
+        {
+            effectiveCanvasWidth = (int)options.CanvasWidth;
+        }
+
         // Calculate node positions
-        var nodes = CalculateNodePositions(groups, (int)options.CanvasWidth, granularity);
+        var nodes = CalculateNodePositions(groups, effectiveCanvasWidth, granularity, columnWidthPx);
 
         progress?.Report(new LayoutProgress(100, "Layout complete", groups.Count, groups.Count));
+
+        // Expose the full time span so the frontend can position axis tick marks
+        // independently of where individual nodes are placed.
+        var layoutMinTs = groups.Min(g => g.PeriodStart);
+        var layoutMaxTs = groups.Max(g => g.PeriodEnd);
 
         var result = new LayoutResult
         {
             Mode = LayoutMode.Calendar,
             Nodes = nodes,
             Edges = [], // No edges in calendar view (Phase 4a)
-            Width = options.CanvasWidth,
+            Width = effectiveCanvasWidth,
             Height = options.CanvasHeight,
+            MinTimestamp = layoutMinTs,
+            MaxTimestamp = layoutMaxTs,
+            CalendarColumnWidthPx = columnWidthPx,
+            Granularity = granularity,
             TotalCommits = allCommits.Count,
             TotalBranches = allCommits.SelectMany(c => c.Branches).Distinct().Count()
         };
@@ -232,20 +280,54 @@ public class CalendarLayoutEngine(
     public static List<LayoutNode> CalculateNodePositions(
         List<PeriodGroup> groups,
         int canvasWidth,
-        CalendarGranularity granularity = CalendarGranularity.Month)
+        CalendarGranularity granularity = CalendarGranularity.Month,
+        double? fixedColumnWidthPx = null)
     {
         if (groups.Count == 0) return [];
 
         const int marginX = 50;
         var usableWidth = canvasWidth - (2 * marginX);
-        var spacing = groups.Count > 1 ? usableWidth / (groups.Count - 1) : 0;
 
         var maxCommits = groups.Max(g => g.CommitCount);
+
+        // For month granularity use the absolute calendar-month index so that every
+        // year always spans exactly 12 columns regardless of which months have commits.
+        // For week/day use sequential index (gaps are expected and small).
+        // For year use proportional time-based positioning.
+        var firstPeriod = groups.Min(g => g.PeriodStart);
+
+        int CalendarMonthIndex(DateTimeOffset ts) =>
+            (ts.Year - firstPeriod.Year) * 12 + (ts.Month - firstPeriod.Month);
+
+        int CalendarWeekIndex(DateTimeOffset weekStart) =>
+            (int)Math.Round((weekStart - firstPeriod).TotalDays / 7);
+
+        double NodeX(int sequentialIndex, PeriodGroup group)
+        {
+            if (fixedColumnWidthPx.HasValue)
+            {
+                var colIndex = granularity switch
+                {
+                    CalendarGranularity.Month => CalendarMonthIndex(group.PeriodStart),
+                    CalendarGranularity.Week  => CalendarWeekIndex(group.PeriodStart),
+                    _                         => sequentialIndex
+                };
+                return marginX + colIndex * fixedColumnWidthPx.Value + fixedColumnWidthPx.Value / 2.0;
+            }
+
+            // Proportional time — node at mid-period
+            var minTs = groups.Min(g => g.PeriodStart);
+            var maxTs = groups.Max(g => g.PeriodEnd);
+            var totalSpan = (maxTs - minTs).TotalSeconds;
+            if (totalSpan <= 0) return marginX;
+            var midpoint = group.PeriodStart + (group.PeriodEnd - group.PeriodStart) / 2;
+            return marginX + ((midpoint - minTs).TotalSeconds / totalSpan * usableWidth);
+        }
 
         var nodes = groups.Select((group, index) => new LayoutNode
         {
             CommitId = FormatPeriodId(group, granularity),
-            X = marginX + (index * spacing),
+            X = NodeX(index, group),
             Y = CenterY, // Single horizontal row (Phase 4a)
             Radius = CalculateNodeRadius(group.CommitCount, maxCommits),
             BranchName = "all", // All branches aggregated
@@ -289,8 +371,9 @@ public class CalendarLayoutEngine(
         var suffix = count != 1 ? "s" : "";
         return granularity switch
         {
-            CalendarGranularity.Day => $"{group.PeriodStart:yyyy-MM-dd}: {count} commit{suffix}",
-            CalendarGranularity.Week => $"Week of {group.PeriodStart:MMM d, yyyy}: {count} commit{suffix}",
+            CalendarGranularity.Day  => $"{group.PeriodStart:yyyy-MM-dd}: {count} commit{suffix}",
+            CalendarGranularity.Week =>
+                $"W{ISOWeek.GetWeekOfYear(group.PeriodStart.DateTime)} {ISOWeek.GetYear(group.PeriodStart.DateTime)}: {count} commit{suffix}",
             CalendarGranularity.Year => $"{group.PeriodStart.Year}: {count} commit{suffix}",
             _ => $"{group.PeriodStart:MMMM yyyy}: {count} commit{suffix}"
         };

@@ -127,7 +127,9 @@ public class LayoutController(
                 TotalCommits = result.TotalCommits,
                 TotalBranches = result.TotalBranches,
                 RowCount = result.RowCount,
-                ColumnCount = result.ColumnCount
+                ColumnCount = result.ColumnCount,
+                CalendarColumnWidthPx = result.CalendarColumnWidthPx,
+                CalendarGranularity = result.Granularity?.ToString()
             };
 
             logger.LogInformation(

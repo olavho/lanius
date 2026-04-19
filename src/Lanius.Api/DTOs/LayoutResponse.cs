@@ -71,6 +71,18 @@ public class LayoutResponse
     /// Number of time columns in the grid.
     /// </summary>
     public int ColumnCount { get; init; }
+
+    /// <summary>
+    /// Fixed pixel width of each calendar column (month/week/day granularity).
+    /// Null for year granularity.
+    /// </summary>
+    public double? CalendarColumnWidthPx { get; init; }
+
+    /// <summary>
+    /// Granularity used for calendar layout: "Month", "Week", "Day", or "Year".
+    /// Null for non-calendar layouts.
+    /// </summary>
+    public string? CalendarGranularity { get; init; }
 }
 
 /// <summary>
