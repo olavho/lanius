@@ -475,6 +475,39 @@ const Visualization = (() => {
 
     function handleCommitHover(event, d) {
         const node = d3.select(event.currentTarget);
+        const focusBranch = d.branches?.[0] || null;
+
+        g.selectAll('.commit-node')
+            .classed('is-dimmed', n => n !== d)
+            .classed('is-hovered', n => n === d);
+
+        g.selectAll('.branch-line')
+            .classed('is-highlighted', function () {
+                const line = d3.select(this);
+                const y1 = Number(line.attr('y1'));
+                if (!focusBranch) return false;
+                const branchIndex = branchData.findIndex(b => b.name === focusBranch);
+                const focusY = branchIndex >= 0 ? branchIndex * config.branchSpacing : null;
+                return focusY !== null && Math.abs(y1 - focusY) < 0.5;
+            })
+            .classed('is-dimmed', function () {
+                const line = d3.select(this);
+                const y1 = Number(line.attr('y1'));
+                if (!focusBranch) return false;
+                const branchIndex = branchData.findIndex(b => b.name === focusBranch);
+                const focusY = branchIndex >= 0 ? branchIndex * config.branchSpacing : null;
+                return !(focusY !== null && Math.abs(y1 - focusY) < 0.5);
+            });
+
+        g.selectAll('.branch-connection')
+            .classed('is-highlighted', l => l.branch === focusBranch)
+            .classed('is-dimmed', l => focusBranch ? l.branch !== focusBranch : false);
+
+        g.selectAll('.edge .edge-line')
+            .classed('is-dimmed', true);
+
+        g.selectAll('.cross-branch-connection')
+            .classed('is-dimmed', true);
 
         node.select('circle')
             .transition()
@@ -488,6 +521,24 @@ const Visualization = (() => {
     function handleCommitUnhover(event) {
         const node = d3.select(event.currentTarget);
         const commit = node.datum();
+
+        g.selectAll('.commit-node')
+            .classed('is-dimmed', false)
+            .classed('is-hovered', false);
+
+        g.selectAll('.branch-line')
+            .classed('is-highlighted', false)
+            .classed('is-dimmed', false);
+
+        g.selectAll('.branch-connection')
+            .classed('is-highlighted', false)
+            .classed('is-dimmed', false);
+
+        g.selectAll('.edge .edge-line')
+            .classed('is-dimmed', false);
+
+        g.selectAll('.cross-branch-connection')
+            .classed('is-dimmed', false);
 
         node.select('circle')
             .transition()
@@ -1245,6 +1296,33 @@ const Visualization = (() => {
 
     function handleNodeHover(event, d) {
         const node = d3.select(event.currentTarget);
+        const focusBranch = d.branchName || null;
+
+        g.selectAll('.commit-node')
+            .classed('is-dimmed', n => n !== d)
+            .classed('is-hovered', n => n === d);
+
+        g.selectAll('.branch-line')
+            .classed('is-highlighted', function () {
+                const line = d3.select(this);
+                const y1 = Number(line.attr('y1'));
+                return focusBranch && Math.abs(y1 - d.y) < 0.5;
+            })
+            .classed('is-dimmed', function () {
+                const line = d3.select(this);
+                const y1 = Number(line.attr('y1'));
+                return focusBranch ? Math.abs(y1 - d.y) >= 0.5 : false;
+            });
+
+        g.selectAll('.branch-connection')
+            .classed('is-highlighted', l => l.branch === focusBranch)
+            .classed('is-dimmed', l => focusBranch ? l.branch !== focusBranch : false);
+
+        g.selectAll('.edge .edge-line')
+            .classed('is-dimmed', true);
+
+        g.selectAll('.cross-branch-connection')
+            .classed('is-dimmed', true);
 
         node.select('circle')
             .transition()
@@ -1257,6 +1335,24 @@ const Visualization = (() => {
 
     function handleNodeUnhover(event, d) {
         const node = d3.select(event.currentTarget);
+
+        g.selectAll('.commit-node')
+            .classed('is-dimmed', false)
+            .classed('is-hovered', false);
+
+        g.selectAll('.branch-line')
+            .classed('is-highlighted', false)
+            .classed('is-dimmed', false);
+
+        g.selectAll('.branch-connection')
+            .classed('is-highlighted', false)
+            .classed('is-dimmed', false);
+
+        g.selectAll('.edge .edge-line')
+            .classed('is-dimmed', false);
+
+        g.selectAll('.cross-branch-connection')
+            .classed('is-dimmed', false);
 
         node.select('circle')
             .transition()

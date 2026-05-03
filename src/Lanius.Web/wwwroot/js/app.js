@@ -843,7 +843,21 @@ function hideLayoutProgress() {
 function updateStatus(elementId, message, isError = false) {
     const element = document.getElementById(elementId);
     element.textContent = message;
-    element.style.color = isError ? '#d32f2f' : 'var(--fg-tertiary)';
+    element.classList.remove('status-line--info', 'status-line--success', 'status-line--error');
+
+    if (!message || !message.trim()) {
+        element.classList.add('status-line--info');
+        return;
+    }
+
+    if (isError) {
+        element.classList.add('status-line--error');
+        return;
+    }
+
+    const successKeywords = ['loaded', 'playing', 'started', 'applied', 'connected', 'complete'];
+    const isSuccess = successKeywords.some(keyword => message.toLowerCase().includes(keyword));
+    element.classList.add(isSuccess ? 'status-line--success' : 'status-line--info');
 }
 
 function updateStats(repo) {

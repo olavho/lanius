@@ -73,6 +73,7 @@
     <None Include="$(MSBuildThisFileDirectory)mvp-implementation-summary.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\2025.11.16-InitialPlan.md" />
     <None Include="$(MSBuildThisFileDirectory)plans\layout-architecture-refactoring.md" />
+    <None Include="$(MSBuildThisFileDirectory)plans\metro-ui-refresh-plan.md" />
     <None Include="$(MSBuildThisFileDirectory)PROJECT-COMPLETE.md" />
     <None Include="$(MSBuildThisFileDirectory)replay-mode-guide.md" />
     <None Include="$(MSBuildThisFileDirectory)requirements-and-tech-stack.md" />

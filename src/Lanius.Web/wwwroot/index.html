@@ -198,18 +198,18 @@
                 </div>
 
                 <!-- Edge Type Legend -->
-                <div class="edge-legend" style="position: absolute; top: 70px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border: 1px solid #ccc; font-size: 11px; font-family: var(--font-mono); z-index: 100;">
-                    <div style="font-weight: bold; margin-bottom: 6px;">Edge Types:</div>
-                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                        <svg width="30" height="2" style="margin-right: 8px;"><line x1="0" y1="1" x2="30" y2="1" stroke="#4a4a4a" stroke-width="1" /></svg>
+                <div class="edge-legend">
+                    <div class="edge-legend-title">Edge types</div>
+                    <div class="edge-legend-item">
+                        <svg class="edge-legend-swatch" width="30" height="2"><line class="edge-normal-sample" x1="0" y1="1" x2="30" y2="1" /></svg>
                         <span>Normal</span>
                     </div>
-                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                        <svg width="30" height="2" style="margin-right: 8px;"><line x1="0" y1="1" x2="30" y2="1" stroke="#4CAF50" stroke-width="2" stroke-dasharray="5,5" /></svg>
+                    <div class="edge-legend-item">
+                        <svg class="edge-legend-swatch" width="30" height="2"><line class="edge-branch-sample" x1="0" y1="1" x2="30" y2="1" /></svg>
                         <span>Branch split</span>
                     </div>
-                    <div style="display: flex; align-items: center;">
-                        <svg width="30" height="2" style="margin-right: 8px;"><line x1="0" y1="1" x2="30" y2="1" stroke="#FF9800" stroke-width="2" stroke-dasharray="3,3" /></svg>
+                    <div class="edge-legend-item">
+                        <svg class="edge-legend-swatch" width="30" height="2"><line class="edge-merge-sample" x1="0" y1="1" x2="30" y2="1" /></svg>
                         <span>Branch merge</span>
                     </div>
                 </div>
