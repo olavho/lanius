@@ -477,7 +477,7 @@ const Visualization = (() => {
         const node = d3.select(event.currentTarget);
         const focusBranch = d.branches?.[0] || null;
 
-        g.selectAll('.commit-node')
+        g.selectAll('.commit-node, .constellation-node')
             .classed('is-dimmed', n => n !== d)
             .classed('is-hovered', n => n === d);
 
@@ -509,6 +509,14 @@ const Visualization = (() => {
         g.selectAll('.cross-branch-connection')
             .classed('is-dimmed', true);
 
+        g.selectAll('.constellation-edge')
+            .classed('is-highlighted', l => l.branchName === focusBranch)
+            .classed('is-dimmed', l => focusBranch ? l.branchName !== focusBranch : false);
+
+        g.selectAll('.constellation-edge')
+            .classed('is-highlighted', l => l.branchName === focusBranch)
+            .classed('is-dimmed', l => focusBranch ? l.branchName !== focusBranch : false);
+
         node.select('circle')
             .transition()
             .duration(200)
@@ -522,7 +530,7 @@ const Visualization = (() => {
         const node = d3.select(event.currentTarget);
         const commit = node.datum();
 
-        g.selectAll('.commit-node')
+        g.selectAll('.commit-node, .constellation-node')
             .classed('is-dimmed', false)
             .classed('is-hovered', false);
 
@@ -538,6 +546,14 @@ const Visualization = (() => {
             .classed('is-dimmed', false);
 
         g.selectAll('.cross-branch-connection')
+            .classed('is-dimmed', false);
+
+        g.selectAll('.constellation-edge')
+            .classed('is-highlighted', false)
+            .classed('is-dimmed', false);
+
+        g.selectAll('.constellation-edge')
+            .classed('is-highlighted', false)
             .classed('is-dimmed', false);
 
         node.select('circle')
@@ -702,6 +718,8 @@ const Visualization = (() => {
             // Render based on layout mode
             if (layout.mode === 'Calendar') {
                 renderCalendarLayout(layout);
+            } else if (layout.mode === 'Constellation') {
+                renderConstellationLayout(layout);
             } else {
                 renderLogicalLayout(layout);
             }
@@ -709,8 +727,10 @@ const Visualization = (() => {
             // Apply zoom transform; render axis for Timeline and Calendar modes
             g.attr('transform', currentZoom);
             if (layout.mode === 'Timeline' || layout.mode === 'Calendar') {
+                axisG.style('display', null);
                 renderTimelineAxis();
             } else if (axisG) {
+                axisG.style('display', 'none');
                 axisG.selectAll('*').remove();
             }
 
@@ -806,6 +826,45 @@ const Visualization = (() => {
         setTimeout(() => g.selectAll('.calendar-node').classed('is-visible', true), 0);
 
         console.log('Calendar layout rendered');
+    }
+
+    function renderConstellationLayout(layout) {
+        console.log('Rendering constellation layout...');
+
+        const edges = g.selectAll('.constellation-edge')
+            .data(layout.edges)
+            .enter()
+            .append('path')
+            .attr('class', d => `constellation-edge constellation-edge--${(d.type || 'normal').toLowerCase()}`)
+            .attr('d', d => {
+                const midX = (d.x1 + d.x2) / 2;
+                const bend = (d.y2 - d.y1) * 0.22;
+                return `M ${d.x1} ${d.y1} C ${midX} ${d.y1 - bend}, ${midX} ${d.y2 + bend}, ${d.x2} ${d.y2}`;
+            });
+
+        const nodeGroups = g.selectAll('.constellation-node')
+            .data(layout.nodes.filter(n => !n.isGhost))
+            .enter()
+            .append('g')
+            .attr('class', d => `constellation-node ${d.isSignificant ? 'is-significant' : ''} ${getBranchClass(d.branchName)}`)
+            .attr('data-commit-id', d => d.commitId)
+            .attr('transform', d => `translate(${d.x}, ${d.y})`)
+            .on('click', (event, d) => showNodeDetail(d))
+            .on('mouseenter', handleNodeHover)
+            .on('mouseleave', handleNodeUnhover);
+
+        nodeGroups.append('circle')
+            .attr('r', 0)
+            .transition()
+            .duration(450)
+            .attr('r', d => d.radius);
+
+        setTimeout(() => {
+            edges.classed('is-visible', true);
+            g.selectAll('.constellation-node').classed('is-visible', true);
+        }, 0);
+
+        console.log('Constellation layout rendered');
     }
 
     function renderTimelineAxis() {
@@ -1298,7 +1357,7 @@ const Visualization = (() => {
         const node = d3.select(event.currentTarget);
         const focusBranch = d.branchName || null;
 
-        g.selectAll('.commit-node')
+        g.selectAll('.commit-node, .constellation-node')
             .classed('is-dimmed', n => n !== d)
             .classed('is-hovered', n => n === d);
 
@@ -1336,7 +1395,7 @@ const Visualization = (() => {
     function handleNodeUnhover(event, d) {
         const node = d3.select(event.currentTarget);
 
-        g.selectAll('.commit-node')
+        g.selectAll('.commit-node, .constellation-node')
             .classed('is-dimmed', false)
             .classed('is-hovered', false);
 
@@ -1500,13 +1559,15 @@ const Visualization = (() => {
 Visualization.initialize();
 
 // Export to global scope
-window.renderVisualization = () => {
-    const layoutData = window.LaniusApp.state.layoutData;
+window.renderVisualization = (layoutOverride = null) => {
+    const layoutData = layoutOverride ?? window.LaniusApp?.state?.layoutData;
     if (layoutData) {
         Visualization.renderLayout(layoutData);
     } else {
         // Fallback to old method if no layout data
-        Visualization.render(window.LaniusApp.state.commits, window.LaniusApp.state.branches);
+        const commits = window.LaniusApp?.state?.commits ?? [];
+        const branches = window.LaniusApp?.state?.branches ?? [];
+        Visualization.render(commits, branches);
     }
 };
 

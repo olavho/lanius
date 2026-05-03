@@ -490,6 +490,10 @@ body {
     cursor: pointer;
 }
 
+.constellation-node {
+    cursor: pointer;
+}
+
     .commit-node circle {
         stroke: var(--line-color);
         stroke-width: 1;
@@ -510,11 +514,35 @@ body {
         stroke-width: 2;
     }
 
+    .constellation-node circle {
+        stroke: var(--line-color);
+        stroke-width: 1;
+        opacity: 0;
+        transition: opacity 0.45s ease;
+    }
+
+    .constellation-node.is-visible circle {
+        opacity: 0.9;
+    }
+
+    .constellation-node.is-significant circle {
+        stroke-width: 1.5;
+    }
+
     .commit-node.is-dimmed circle {
         opacity: 0.2 !important;
     }
 
+    .constellation-node.is-dimmed circle {
+        opacity: 0.2 !important;
+    }
+
     .commit-node.is-hovered circle {
+        opacity: 1 !important;
+        stroke-width: 2;
+    }
+
+    .constellation-node.is-hovered circle {
         opacity: 1 !important;
         stroke-width: 2;
     }
@@ -723,6 +751,38 @@ body {
     opacity: 0;
     transition: opacity 0.5s ease;
 }
+
+.constellation-edge {
+    fill: none;
+    stroke: var(--line-color-light);
+    stroke-width: 1;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+}
+
+    .constellation-edge.is-visible {
+        opacity: 0.38;
+    }
+
+    .constellation-edge.is-dimmed {
+        opacity: 0.08 !important;
+    }
+
+    .constellation-edge.is-highlighted {
+        opacity: 0.9 !important;
+        stroke-width: 1.5;
+        stroke: var(--fg-secondary);
+    }
+
+    .constellation-edge--branch {
+        stroke: #4CAF50;
+        stroke-dasharray: 5,5;
+    }
+
+    .constellation-edge--merge {
+        stroke: #FF9800;
+        stroke-dasharray: 3,3;
+    }
 
     .edge-line.is-visible {
         opacity: 0.3;

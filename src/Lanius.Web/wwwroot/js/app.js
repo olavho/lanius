@@ -129,6 +129,8 @@ function initializeEventHandlers() {
         replayPanel.style.display = state.layoutMode === 'calendar' ? 'none' : '';
         if (state.layoutMode === 'calendar') {
             infoText.innerHTML = '<small>Groups commits by time periods</small>';
+        } else if (state.layoutMode === 'constellation') {
+            infoText.innerHTML = '<small>Aesthetic branch flow view (not strict timeline accuracy)</small>';
         } else if (state.layoutMode === 'timeline') {
             infoText.innerHTML = '<small>Shows each commit at its actual date position</small>';
         } else {
@@ -422,7 +424,7 @@ async function loadRepository() {
 
         // Render visualization with new layout data
         console.log('Calling renderVisualization with layout data');
-        renderVisualization();
+        renderVisualization(layout);
         populateReplayBranchList();
 
         hideLayoutProgress();

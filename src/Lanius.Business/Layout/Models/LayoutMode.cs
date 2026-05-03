@@ -18,5 +18,10 @@ public enum LayoutMode
     /// <summary>
     /// Timeline layout placing each commit at its real date on a proportional x-axis.
     /// </summary>
-    Timeline
+    Timeline,
+
+    /// <summary>
+    /// Aesthetic topology layout that prioritizes visual flow over strict date accuracy.
+    /// </summary>
+    Constellation
 }

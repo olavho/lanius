@@ -41,6 +41,7 @@ builder.Services.AddScoped<IBranchHierarchyAnalyzer, BranchHierarchyAnalyzer>();
 builder.Services.AddScoped<LogicalLayoutEngine>();
 builder.Services.AddScoped<CalendarLayoutEngine>();
 builder.Services.AddScoped<TimelineLayoutEngine>();
+builder.Services.AddScoped<ConstellationLayoutEngine>();
 
 // Register layout engine factory
 builder.Services.AddScoped<ILayoutEngine>(provider =>
